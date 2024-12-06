@@ -1,0 +1,6 @@
+Dockerfile
+docker-compose.yml
+target
+container
+.idea
+.git
