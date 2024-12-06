@@ -92,18 +92,10 @@ fn add_to_repo(repo_name: &str, files: &Vec<String>) -> bool {
         &format!("{repo_name}.db.tar.zst"),
     ]);
     command.args(files);
-    let result = match command.spawn() {
-        Ok(child) => child,
-        Err(err) => {
-            error!("Failed to spawn {REPO_ADD}: {err}");
-            return false;
-        }
-    };
-
-    let output = match result.wait_with_output() {
+    let output = match command.output() {
         Ok(output) => output,
         Err(err) => {
-            error!("An error occurred whilst waiting for {REPO_ADD} to exit: {err}");
+            error!("Failed to spawn {REPO_ADD}: {err}");
             return false;
         }
     };
