@@ -24,3 +24,9 @@ I should work out these modules of the application:
   - Spins up containers for build tasks and monitors their lifecycle.
 - Scheduler
   - Keeps track of managed packages and issues initial build and rebuilds (due to updates or failed build).
+
+# Documentation
+
+I need to write code documentation so it's more clear what each part actually does.
+
+Also, setup instructions are needed for others to actually be able to make use of this.
