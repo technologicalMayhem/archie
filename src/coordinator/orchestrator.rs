@@ -1,10 +1,11 @@
+use crate::config;
+use crate::messages::Message;
 use crate::stop_token::StopToken;
 use bollard::container::{
     Config, CreateContainerOptions, LogOutput, LogsOptions, StopContainerOptions,
 };
 use bollard::models::ContainerStateStatusEnum;
 use bollard::Docker;
-use coordinator::{WorkAssignment, WorkOrders};
 use futures::future::join_all;
 use futures::StreamExt;
 use mem::swap;
@@ -12,14 +13,13 @@ use std::mem;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::sync::broadcast::Receiver;
+use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::time::sleep;
 use tracing::info;
 use tracing::log::{error, warn};
-use crate::config;
 
-pub async fn start(work_receiver: Receiver<WorkAssignment>, stop_token: StopToken) {
-    if let Err(err) = run(work_receiver, stop_token).await {
+pub async fn start(sender: Sender<Message>, receiver: Receiver<Message>, stop_token: StopToken) {
+    if let Err(err) = run(sender, receiver, stop_token).await {
         error!("Orchestrator stopped with error: {err}");
     } else {
         info!("Stopped orchestrator");
@@ -27,7 +27,8 @@ pub async fn start(work_receiver: Receiver<WorkAssignment>, stop_token: StopToke
 }
 
 async fn run(
-    mut work_receiver: Receiver<WorkAssignment>,
+    sender: Sender<Message>,
+    mut receiver: Receiver<Message>,
     mut stop_token: StopToken,
 ) -> Result<(), Error> {
     let image = config::image();
@@ -62,15 +63,17 @@ async fn run(
             join_all(stop_tasks).await;
             return Ok(());
         }
-        if !work_receiver.is_empty() {
-            work_receiver.recv().await?;
-            work_units_remaining += 1;
+        if !receiver.is_empty() {
+            let message = receiver.recv().await?;
+            if matches!(message, Message::BuildPackage(_)) {
+                work_units_remaining += 1;
+            }
         }
         if work_units_remaining > 0 && active_containers.len() < config::max_builders() {
             active_containers.push(start_build_container(&docker, &image).await?);
             work_units_remaining -= 1;
         }
-        clean_up_containers(&docker, &mut active_containers).await?;
+        clean_up_containers(&docker, &sender, &mut active_containers).await?;
         sleep(Duration::from_millis(100)).await;
     }
 }
@@ -97,6 +100,7 @@ async fn start_build_container(docker: &Docker, image: &str) -> Result<String, E
 
 async fn clean_up_containers(
     docker: &Docker,
+    sender: &Sender<Message>,
     active_containers: &mut Vec<String>,
 ) -> Result<(), Error> {
     let mut active = Vec::with_capacity(active_containers.len());
@@ -128,6 +132,11 @@ async fn clean_up_containers(
                 if exit_code != 0 {
                     warn!("{id} exited abnormally. Printing logs:");
                     get_logs(docker, &id).await;
+                    if let Err(err) = sender.send(Message::BuildFailure {
+                        worker: id.to_string(),
+                    }) {
+                        error!("Failed to send message: {err}");
+                    }
                 }
                 remove_container(docker, &id).await;
                 continue;

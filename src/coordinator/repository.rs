@@ -1,25 +1,28 @@
+use crate::messages::{Message, Package};
 use crate::stop_token::StopToken;
 use crate::{config, state};
-use coordinator::Artifacts;
+use std::path::PathBuf;
 use std::process::Command;
 use thiserror::Error;
-use tokio::fs::{remove_file, try_exists, write};
+use tokio::fs::{remove_file, try_exists};
 use tokio::select;
-use tokio::sync::broadcast::Receiver;
+use tokio::sync::broadcast::{Receiver, Sender};
 use tracing::error;
 use tracing::log::info;
 
 pub const REPO_DIR: &str = "/output/";
 const REPO_ADD: &str = "repo-add";
+const REPO_REMOVE: &str = "repo-remove";
 
-pub async fn start(artifacts_receive: Receiver<Artifacts>, stop_token: StopToken) {
-    if let Err(err) = run_repository(artifacts_receive, stop_token).await {
+pub async fn start(sender: Sender<Message>, receive: Receiver<Message>, stop_token: StopToken) {
+    if let Err(err) = run_repository(sender, receive, stop_token).await {
         error!("Stopped with an error: {err}");
     }
 }
 
 async fn run_repository(
-    mut artifacts_receive: Receiver<Artifacts>,
+    sender: Sender<Message>,
+    mut receive: Receiver<Message>,
     mut stop_token: StopToken,
 ) -> Result<(), Error> {
     info!("Starting");
@@ -29,25 +32,43 @@ async fn run_repository(
 
     loop {
         let artifact = select! {
-            work = artifacts_receive.recv() => Some(work),
+            work = receive.recv() => Some(work),
             () = stop_token.wait() => None,
         };
-        let Some(Ok(artifacts)) = artifact else {
+        let Some(Ok(message)) = artifact else {
             break;
         };
 
-        info!("Successfully built {}", artifacts.package_name);
-        let mut file_names = Vec::new();
-        for (name, data) in artifacts.files {
-            write(format!("{REPO_DIR}{name}"), data).await?;
-            file_names.push(name);
-        }
+        match message {
+            Message::ArtifactsUploaded {
+                package,
+                files,
+                build_time,
+            } => {
+                info!("Successfully built {}", package);
 
-        state::lock_repo().await;
-        if add_to_repo(&repo_name, &file_names) {
-            state::build_package(&artifacts.package_name, artifacts.build_time, file_names).await;
+                state::lock_repo().await;
+                if add_to_repo(&repo_name, &files) {
+                    state::build_package(&package, build_time, files).await;
+                    if let Err(err) = sender.send(Message::BuildSuccess(package.clone())) {
+                        error!("Failed to send message: {err}");
+                    }
+                }
+                state::unlock_repo().await;
+            }
+            Message::RemovePackages(packages) => {
+                let mut files = Vec::new();
+                for package in &packages {
+                    files.append(&mut state::get_files(package).await);
+                }
+                remove_from_repo(&repo_name, &files, &packages);
+            }
+            Message::AddPackages(_)
+            | Message::AcceptedWork { .. }
+            | Message::BuildPackage(_)
+            | Message::BuildSuccess(_)
+            | Message::BuildFailure { .. } => (),
         }
-        state::unlock_repo().await;
     }
 
     info!("Stopped repository");
@@ -92,6 +113,27 @@ fn add_to_repo(repo_name: &str, files: &Vec<String>) -> bool {
         &format!("{repo_name}.db.tar.zst"),
     ]);
     command.args(files);
+    run_command(command)
+}
+
+fn remove_from_repo(repo_name: &str, files: &Vec<String>, packages: &Vec<Package>) -> bool {
+    let mut command = Command::new(REPO_REMOVE);
+    command.current_dir(REPO_DIR);
+    command.args([&format!("{repo_name}.db.tar.zst")]);
+    command.args(packages);
+    let command_result = run_command(command);
+
+    let repo_dir = PathBuf::new().join(REPO_DIR);
+    for file in files {
+        if let Err(err) = std::fs::remove_file(repo_dir.join(file)) {
+            error!("Failed to delete {file}: {err}");
+        }
+    }
+
+    command_result
+}
+
+fn run_command(mut command: Command) -> bool {
     let output = match command.output() {
         Ok(output) => output,
         Err(err) => {

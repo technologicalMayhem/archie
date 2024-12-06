@@ -1,4 +1,4 @@
-use clap::builder::TypedValueParser;
+use crate::messages::Package;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{exists, read_to_string};
@@ -26,19 +26,18 @@ pub struct PackageStatus {
 
 #[derive(Serialize, Deserialize)]
 struct Persistent {
-    pub package_status: HashMap<String, Option<PackageStatus>>,
+    pub package_status: HashMap<Package, Option<PackageStatus>>,
 }
 
 #[derive(Default)]
 struct Ephermal {
     repository_locked: bool,
-    retries: HashMap<String, u8>,
 }
 
 #[derive(Clone)]
 struct State {
     persistent: Arc<RwLock<Persistent>>,
-    ephermal: Arc<RwLock<Ephermal>>,
+    ephemeral: Arc<RwLock<Ephermal>>,
 }
 
 fn load_state() -> Result<State, Error> {
@@ -52,7 +51,7 @@ fn load_state() -> Result<State, Error> {
 
     Ok(State {
         persistent: Arc::new(RwLock::new(persistent)),
-        ephermal: Arc::new(RwLock::new(Ephermal::default())),
+        ephemeral: Arc::new(RwLock::new(Ephermal::default())),
     })
 }
 
@@ -81,9 +80,9 @@ pub async fn build_package(package_name: &str, build_time: i64, files: Vec<Strin
     save_state().await;
 }
 
-pub async fn track_package(package_name: &str) {
+pub async fn track_package(package: &Package) {
     let mut state = STATE.persistent.write().await;
-    state.package_status.insert(package_name.to_string(), None);
+    state.package_status.insert(package.to_string(), None);
     drop(state);
     save_state().await;
 }
@@ -123,7 +122,7 @@ pub async fn set_last_check(package_name: &str, last_check: i64) {
     save_state().await;
 }
 
-pub async fn get_build_times<'a>(packages: &'a [String]) -> Vec<(&'a str, i64)> {
+pub async fn get_build_times(packages: &[String]) -> Vec<(&str, i64)> {
     let states = &STATE.persistent.read().await.package_status;
     packages
         .iter()
@@ -133,6 +132,24 @@ pub async fn get_build_times<'a>(packages: &'a [String]) -> Vec<(&'a str, i64)> 
                 .and_then(Option::as_ref)
                 .map(|status| (pkg.as_str(), status.last_build))
         })
+        .collect()
+}
+
+pub async fn get_files(package: &Package) -> Vec<String> {
+    STATE
+        .persistent
+        .read()
+        .await
+        .package_status
+        .iter()
+        .filter_map(|(name, status)| {
+            if name == package {
+                status.as_ref().map(|status| status.files.clone())
+            } else {
+                None
+            }
+        })
+        .flatten()
         .collect()
 }
 
@@ -148,16 +165,36 @@ pub async fn get_all_files() -> Vec<String> {
         .collect()
 }
 
+pub async fn is_package_tracked(package: &Package) -> bool {
+    STATE
+        .persistent
+        .read()
+        .await
+        .package_status
+        .contains_key(package)
+}
+
+pub async fn remove_packages(package: &Vec<Package>) {
+    let mut persistent = STATE.persistent.write().await;
+
+    for package in package {
+        persistent.package_status.remove(package);
+    }
+
+    drop(persistent);
+    save_state().await;
+}
+
 pub async fn lock_repo() {
-    STATE.ephermal.write().await.repository_locked = true;
+    STATE.ephemeral.write().await.repository_locked = true;
 }
 
 pub async fn unlock_repo() {
-    STATE.ephermal.write().await.repository_locked = false;
+    STATE.ephemeral.write().await.repository_locked = false;
 }
 
 pub async fn is_repo_locked() -> bool {
-    STATE.ephermal.read().await.repository_locked
+    STATE.ephemeral.read().await.repository_locked
 }
 
 #[derive(Debug, Error)]

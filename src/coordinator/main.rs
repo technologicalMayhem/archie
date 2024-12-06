@@ -1,5 +1,6 @@
 mod aur;
 mod config;
+mod messages;
 mod orchestrator;
 mod repository;
 mod scheduler;
@@ -7,8 +8,9 @@ mod state;
 mod stop_token;
 mod web_server;
 
+use crate::messages::Message;
 use crate::stop_token::StopToken;
-use coordinator::{abort_if_not_in_docker, Artifacts, WorkAssignment};
+use coordinator::abort_if_not_in_docker;
 use signal_hook::consts::{SIGINT, SIGTERM};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -33,8 +35,7 @@ async fn main() -> Result<(), Error> {
 
     let mut set = JoinSet::new();
     let mut stop_token = StopToken::new();
-    let (artifacts_sender, artifacts_receive) = channel::<Artifacts>(16);
-    let (work_sender, work_receive) = channel::<WorkAssignment>(128);
+    let (send, receive) = channel::<Message>(128);
 
     info!("Starting application");
     let pkg = state::packages().await.join("\n");
@@ -45,17 +46,25 @@ async fn main() -> Result<(), Error> {
     }
 
     set.spawn(web_server::start(
-        work_receive.resubscribe(),
-        work_sender.clone(),
-        artifacts_sender,
+        receive.resubscribe(),
+        send.clone(),
         stop_token.child(),
     ));
-    set.spawn(orchestrator::start(work_receive, stop_token.child()));
+    set.spawn(orchestrator::start(
+        send.clone(),
+        receive.resubscribe(),
+        stop_token.child(),
+    ));
     set.spawn(repository::start(
-        artifacts_receive,
+        send.clone(),
+        receive.resubscribe(),
         stop_token.child(),
     ));
-    set.spawn(scheduler::start(work_sender, stop_token.child()));
+    set.spawn(scheduler::start(
+        send.clone(),
+        receive.resubscribe(),
+        stop_token.child(),
+    ));
     set.spawn(setup_stop_mechanism(stop_token));
 
     set.join_all().await;
