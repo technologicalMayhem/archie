@@ -1,11 +1,12 @@
+use crate::repository::REPO_DIR;
 use crate::state::track_package;
 use crate::stop_token::StopToken;
 use crate::{config, state};
-use axum::extract::{DefaultBodyLimit, Path, State};
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use coordinator::{Artifacts, WorkAssignment, WorkOrders};
+use coordinator::{Artifacts, Status, WorkAssignment, WorkOrders};
 use futures::future::join_all;
 use std::sync::Mutex;
 use tokio::net::TcpListener;
@@ -15,7 +16,6 @@ use tokio::task::spawn;
 use tower_http::services::ServeDir;
 use tracing::error;
 use tracing::log::info;
-use crate::repository::REPO_DIR;
 
 static WORK: Mutex<Vec<WorkAssignment>> = Mutex::new(Vec::new());
 
@@ -29,7 +29,10 @@ pub async fn start(
 
     let web = spawn(async move {
         let router = Router::new()
-            .route("/work", get(assign_work).post(receive_work))
+            .route("/status", get(status))
+            .route("/packages/add", post(add_package))
+            .route("/packages/remove", post(remove_package))
+            .route("/work", post(receive_work))
             .with_state(work_sender)
             .route(
                 "/artifacts",
@@ -69,7 +72,7 @@ pub async fn start(
     info!("Stopped web server");
 }
 
-async fn assign_work(headers: HeaderMap) -> Result<Json<WorkAssignment>, StatusCode> {
+async fn add_package(headers: HeaderMap) -> Result<Json<WorkAssignment>, StatusCode> {
     if let Some(work) = WORK.lock().expect("Could not acquire work lock").pop() {
         let name = headers
             .get("hostname")
@@ -109,4 +112,14 @@ async fn receive_artifacts(
     );
 
     artifacts.send(data).expect("Could not send artifact.");
+}
+
+async fn remove_package() -> StatusCode {
+    StatusCode::NOT_IMPLEMENTED
+}
+
+async fn status() -> Json<Status> {
+    Json(Status {
+        packages: state::packages().await,
+    })
 }

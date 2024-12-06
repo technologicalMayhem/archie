@@ -43,3 +43,4 @@ RUN makepkg -D paru-bin --noconfirm -si
 RUN rm -rf paru
 COPY --from=builder /app/target/release/worker .
 CMD ["./worker"]
+ENV ADDRESS=172.17.0.1 HTTPS=false

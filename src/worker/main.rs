@@ -1,6 +1,6 @@
 mod config;
 
-use coordinator::{abort_if_not_in_docker, endpoints, Artifacts, WorkAssignment, WorkOrders};
+use coordinator::{abort_if_not_in_docker, endpoints, Artifacts, WorkAssignment};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::StatusCode;
 use std::collections::HashMap;
@@ -22,9 +22,10 @@ async fn main() -> Result<(), AppError> {
     info!("Hostname: {hostname}");
     headers.insert("hostname", HeaderValue::from_str(&hostname)?);
     let client = reqwest::Client::builder().default_headers(headers).build()?;
+    let endpoints = endpoints::Endpoints::default();
 
     let work_assignment: WorkAssignment = loop {
-        let response = client.get(endpoints::work()).send().await?;
+        let response = client.get(endpoints.work()).send().await?;
         if response.status() == StatusCode::NOT_FOUND {
             if !sleeping {
                 log::info!("No work available. Waiting.");
@@ -40,7 +41,7 @@ async fn main() -> Result<(), AppError> {
     let artifacts = build_pkg(work_assignment.package).await?;
 
     let response = client
-        .post(endpoints::artifacts())
+        .post(endpoints.artifacts())
         .json(&artifacts)
         .send()
         .await?;

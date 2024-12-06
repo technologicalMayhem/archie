@@ -1,7 +1,9 @@
-use clap::Parser;
-use coordinator::{endpoints, WorkAssignment, WorkOrders};
-use reqwest::Client;
-use tracing::{error, info, warn};
+mod actions;
+mod config;
+
+use clap::{Parser, Subcommand};
+use thiserror::Error;
+use tracing::error;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt;
 use tracing_subscriber::layer::SubscriberExt;
@@ -9,47 +11,52 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 #[derive(Parser)]
 struct Arguments {
-    packages: Vec<String>,
+    #[command(subcommand)]
+    action: Action,
 }
 
-#[tokio::main]
-async fn main() {
+#[derive(Subcommand, Clone)]
+enum Action {
+    /// Add new packages to the coordinator
+    Add(actions::Add),
+    /// Remove packages from the coordinator
+    Remove(actions::Remove),
+    /// Display the status of coordinator
+    Status,
+    /// Setup archie's config
+    Init,
+}
+
+fn main() -> Result<(), Error> {
     tracing_subscriber::registry()
-        .with(LevelFilter::DEBUG)
+        .with(LevelFilter::INFO)
         .with(fmt::layer().without_time())
         .init();
     let args = Arguments::parse();
-    let client = Client::new();
 
-    if args.packages.is_empty() {
-        warn!("No packages to build were given.");
+    let mut config = config::load();
+
+    if !config.initialized && !matches!(args.action, Action::Init) {
+        println!("Archie's config is not set up. Run 'archie init' to set it up.");
+        return Ok(());
     }
 
-    match client
-        .post(endpoints::work())
-        .json(&WorkOrders {
-            packages: args
-                .packages
-                .into_iter()
-                .map(|package| WorkAssignment { package })
-                .collect(),
-        })
-        .send()
-        .await
-    {
-        Ok(response) => {
-            if response.status().is_success() {
-                info!("Sent request to build packages");
-            } else {
-                error!(
-                    "Got {} from server {:?}",
-                    response.status(),
-                    response.error_for_status()
-                );
-            }
-        }
-        Err(err) => {
-            error!("Failed to send request: {err}");
-        }
+    match args.action {
+        Action::Add(add) => actions::add(&config, add)?,
+        Action::Remove(remove) => actions::remove(&config, remove)?,
+        Action::Status => actions::status(&config)?,
+        Action::Init => config::init(&mut config)?,
     }
+
+    Ok(())
+}
+
+#[derive(Debug, Error)]
+enum Error {
+    #[error("{0}")]
+    Config(#[from] config::Error),
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+    #[error("An error occurred whilst making a request: {0}")]
+    Request(#[from] Box<ureq::Error>),
 }

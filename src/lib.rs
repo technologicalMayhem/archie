@@ -28,6 +28,16 @@ pub struct Artifacts {
     pub files: HashMap<String, Vec<u8>>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Status {
+    pub packages: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RemovePackages {
+    pub packages: Vec<String>
+}
+
 pub fn env_or<T>(var: &str, or: T) -> T
 where
     T: FromStr,
