@@ -2,8 +2,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::{select, spawn};
-use tokio::task::JoinHandle;
+use tokio::select;
 use tokio::time::sleep;
 use tokio::time::sleep as tokio_sleep;
 
@@ -52,10 +51,6 @@ impl StopToken {
         while !self.stopped() {
             sleep(Duration::from_millis(10)).await;
         }
-    }
-
-    pub fn wait_spawn(mut self) -> JoinHandle<()> {
-        spawn(async move { self.wait().await })
     }
 
     pub async fn sleep(&mut self, duration: Duration) {

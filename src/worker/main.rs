@@ -1,6 +1,6 @@
 mod config;
 
-use coordinator::{abort_if_not_in_docker, endpoints, Artifacts, WorkAssignment};
+use coordinator::{abort_if_not_in_docker, Artifacts, WorkAssignment};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::StatusCode;
 use std::collections::HashMap;
