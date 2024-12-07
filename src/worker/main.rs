@@ -10,6 +10,7 @@ use thiserror::Error;
 use time::OffsetDateTime;
 use tokio::process::Command;
 use tracing::{info, log, Level};
+use coordinator::endpoints::Endpoints;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -22,7 +23,11 @@ async fn main() -> Result<(), AppError> {
     info!("Hostname: {hostname}");
     headers.insert("hostname", HeaderValue::from_str(&hostname)?);
     let client = reqwest::Client::builder().default_headers(headers).build()?;
-    let endpoints = endpoints::Endpoints::default();
+    let endpoints = Endpoints {
+        address: "172.17.0.1".to_string(),
+        https: false,
+        ..Default::default()
+    };
 
     let work_assignment: WorkAssignment = loop {
         let response = client.get(endpoints.work()).send().await?;

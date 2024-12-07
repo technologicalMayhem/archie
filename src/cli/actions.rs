@@ -1,11 +1,11 @@
+use crate::config::Config;
 use crate::Error;
 use clap::Args;
 use colored::Colorize;
-use coordinator::{Status, WorkAssignment, WorkOrders};
+use coordinator::endpoints::Endpoints;
+use coordinator::{RemovePackages, Status, WorkAssignment, WorkOrders};
 use tracing::warn;
 use ureq::Agent;
-use coordinator::endpoints::Endpoints;
-use crate::config::Config;
 
 #[derive(Clone, Args)]
 pub struct Add {
@@ -50,12 +50,8 @@ pub fn remove(config: &Config, remove: Remove) -> Result<(), Error> {
 
     client
         .post(&endpoints.remove_packages())
-        .send_json(&WorkOrders {
-            packages: remove
-                .packages
-                .into_iter()
-                .map(|package| WorkAssignment { package })
-                .collect(),
+        .send_json(RemovePackages {
+            packages: remove.packages,
         })
         .map_err(Box::new)?;
 

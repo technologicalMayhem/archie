@@ -47,9 +47,9 @@ pub async fn start(
         let state = RequestState { sender };
         let router = Router::new()
             .route("/status", get(status))
-            .route("/packages/add", post(hand_out_work))
+            .route("/packages/add", post(add_package))
             .route("/packages/remove", post(remove_package))
-            .route("/work", post(add_package))
+            .route("/work", get(hand_out_work))
             .route(
                 "/artifacts",
                 post(receive_artifacts).layer(DefaultBodyLimit::disable()),

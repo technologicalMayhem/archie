@@ -8,7 +8,8 @@ use bimap::{BiHashMap, BiMap};
 use std::collections::HashMap;
 use std::time::Duration;
 use time::OffsetDateTime;
-use tokio::sync::broadcast::error::TryRecvError;
+use tokio::select;
+use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tracing::{error, info};
 
@@ -28,6 +29,10 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
     let mut workers: BiHashMap<String, Package> = BiMap::new();
 
     loop {
+        let message: Option<Result<Message, RecvError>> = select! {
+            message = receiver.recv() => Some(message),
+            () = stop_token.sleep(Duration::from_secs(60)) => None,
+        };
         if stop_token.stopped() {
             break;
         }
@@ -44,11 +49,12 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
             }
         }
 
-        match receiver.try_recv() {
-            Ok(message) => match message {
+        match message {
+            Some(Ok(message)) => match message {
                 Message::AddPackages(packages) => {
                     for package in packages {
                         if !state::is_package_tracked(&package).await {
+                            info!("Added new package {package}");
                             state::track_package(&package).await;
                             send_message(&sender, Message::BuildPackage(package));
                         }
@@ -56,6 +62,7 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
                 }
                 Message::RemovePackages(packages) => {
                     state::remove_packages(&packages).await;
+                    info!("Stopped tracking {}", packages.join(", "));
                 }
                 Message::AcceptedWork { package, worker } => {
                     workers.insert(worker, package);
@@ -80,13 +87,15 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
                 }
                 Message::BuildPackage(_) | Message::ArtifactsUploaded { .. } => (),
             },
-            Err(TryRecvError::Closed) => break,
-            Err(err) => {
-                error!("An error occurred whilst trying to read a message: {err}");
+            Some(Err(RecvError::Closed)) => {
+                error!("Message channel closed");
+                break;
             }
+            Some(Err(RecvError::Lagged(lag))) => {
+                error!("The message channel lagged by {lag}. This should not happen!");
+            }
+            _ => (),
         }
-
-        stop_token.sleep(Duration::from_secs(60)).await;
     }
 }
 
