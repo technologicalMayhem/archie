@@ -29,14 +29,6 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
     let mut workers: BiHashMap<String, Package> = BiMap::new();
 
     loop {
-        let message: Option<Result<Message, RecvError>> = select! {
-            message = receiver.recv() => Some(message),
-            () = stop_token.sleep(Duration::from_secs(60)) => None,
-        };
-        if stop_token.stopped() {
-            break;
-        }
-
         let now = OffsetDateTime::now_utc().unix_timestamp();
 
         if next_update_check < now {
@@ -47,6 +39,14 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
             } else {
                 next_update_check = now + RETRY_TIME;
             }
+        }
+
+        let message: Option<Result<Message, RecvError>> = select! {
+            message = receiver.recv() => Some(message),
+            () = stop_token.sleep(Duration::from_secs(60)) => None,
+        };
+        if stop_token.stopped() {
+            break;
         }
 
         match message {
