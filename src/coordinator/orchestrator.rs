@@ -149,9 +149,7 @@ async fn clean_up_containers(
                 if exit_code != 0 {
                     warn!("{id} exited abnormally. Printing logs:");
                     get_logs(docker, id).await;
-                    if let Err(err) = sender.send(Message::BuildFailure {
-                        worker: (*id).to_string(),
-                    }) {
+                    if let Err(err) = sender.send(Message::BuildFailure(package.to_string())) {
                         error!("Failed to send message: {err}");
                     }
                 }

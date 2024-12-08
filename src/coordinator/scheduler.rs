@@ -25,8 +25,8 @@ pub async fn start(sender: Sender<Message>, receiver: Receiver<Message>, token: 
 async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token: StopToken) {
     let stop_token = &mut token;
     let mut next_update_check = 0;
+    let mut next_retry_check = 0;
     let mut retries: HashMap<Package, u8> = HashMap::new();
-    let mut workers: BiHashMap<String, Package> = BiMap::new();
 
     loop {
         let now = OffsetDateTime::now_utc().unix_timestamp();
@@ -34,11 +34,20 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
         if next_update_check < now {
             if check_for_package_updates(&sender, stop_token).await.is_ok() {
                 next_update_check = now + TIMEOUT;
-
                 retries.clear();
             } else {
                 next_update_check = now + RETRY_TIME;
             }
+        }
+
+        if next_retry_check < now {
+            for (package, attempt) in &retries {
+                if *attempt < 3 {
+                    info!("Retrying build for {package}");
+                    send_message(&sender, Message::BuildPackage(package.clone()));
+                }
+            }
+            next_retry_check = now + RETRY_TIME;
         }
 
         let message: Option<Result<Message, RecvError>> = select! {
@@ -64,26 +73,15 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
                     state::remove_packages(&packages).await;
                     info!("Stopped tracking {}", packages.join(", "));
                 }
-                Message::AcceptedWork { package, worker } => {
-                    workers.insert(worker, package);
-                }
                 Message::BuildSuccess(package) => {
-                    workers.remove_by_right(&package);
                     retries.remove(&package);
                 }
-                Message::BuildFailure { worker } => {
-                    if let Some(package) = workers.get_by_left(&worker) {
-                        if let Some(retries) = retries.get_mut(package) {
-                            *retries += 1;
-                            if *retries < 3 {
-                                send_message(&sender, Message::BuildPackage(package.clone()));
-                            }
-                        } else {
-                            retries.insert(package.clone(), 1);
-                        }
+                Message::BuildFailure(package) => {
+                    if let Some(retries) = retries.get_mut(&package) {
+                        *retries += 1;
                     } else {
-                        error!("Failed to lookup worker. This is a bug.");
-                    }
+                        retries.insert(package.clone(), 1);
+                    };
                 }
                 Message::BuildPackage(_) | Message::ArtifactsUploaded { .. } => (),
             },

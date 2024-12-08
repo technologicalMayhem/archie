@@ -4,15 +4,9 @@ pub type Package = String;
 pub enum Message {
     AddPackages(Vec<Package>),
     RemovePackages(Vec<Package>),
-    AcceptedWork {
-        package: Package,
-        worker: String,
-    },
     BuildPackage(Package),
     BuildSuccess(Package),
-    BuildFailure {
-        worker: String,
-    },
+    BuildFailure(Package),
     ArtifactsUploaded {
         package: Package,
         files: Vec<String>,
