@@ -96,18 +96,13 @@ async fn run_command(app: &str, args: &[&str]) -> Result<(), AppError> {
     let output = Command::new(app)
         .current_dir("/home/worker/build")
         .args(args)
-        .output()
+        .spawn()?
+        .wait_with_output()
         .await
         .expect("Failed to execute command");
 
     if !output.status.success() {
-        log::error!(
-            "Command {app} {} did not exist successfully.\nStdout:\n{}\n\nStderr:\n{}",
-            args.join(" "),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-
+        log::error!("Command {app} did not exit successfully");
         return Err(AppError::ProcessFailed);
     }
 
