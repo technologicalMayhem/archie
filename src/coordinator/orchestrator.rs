@@ -1,5 +1,5 @@
 use crate::config;
-use crate::messages::Message;
+use crate::messages::{Message, Package};
 use crate::stop_token::StopToken;
 use bollard::container::{
     Config, CreateContainerOptions, LogOutput, LogsOptions, StopContainerOptions,
@@ -8,8 +8,7 @@ use bollard::models::ContainerStateStatusEnum;
 use bollard::Docker;
 use futures::future::join_all;
 use futures::StreamExt;
-use mem::swap;
-use std::mem;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -37,8 +36,8 @@ async fn run(
         return Err(Error::ImageNotAvailable(err));
     }
 
-    let mut work_units_remaining = 0;
-    let mut active_containers: Vec<String> = Vec::new();
+    let mut packages_to_build = Vec::new();
+    let mut active_containers: HashMap<Package, String> = HashMap::new();
 
     info!("Starting");
     loop {
@@ -46,14 +45,14 @@ async fn run(
             let docker = Arc::new(docker);
             let stop_tasks: Vec<_> = active_containers
                 .into_iter()
-                .map(|container| {
+                .map(|(package, container)| {
                     let docker = docker.clone();
                     async move {
                         if let Err(err) = docker
                             .stop_container(&container, Some(StopContainerOptions { t: 0 }))
                             .await
                         {
-                            error!("Failed to stop container {container}: {err}");
+                            error!("Failed to stop container {container} for {package}: {err}");
                         };
                         remove_container(&docker, &container).await;
                     }
@@ -65,28 +64,47 @@ async fn run(
         }
         if !receiver.is_empty() {
             let message = receiver.recv().await?;
-            if matches!(message, Message::BuildPackage(_)) {
-                work_units_remaining += 1;
+            if let Message::BuildPackage(package) = message {
+                packages_to_build.push(package);
+            } else if let Message::RemovePackages(packages) = message {
+                for package in packages {
+                    if let Some(container) = active_containers.get(&package) {
+                        println!("Stopping build of package {package}, as it has been removed.");
+                        if let Err(err) = docker
+                            .stop_container(container, Some(StopContainerOptions { t: 0 }))
+                            .await
+                        {
+                            error!("Failed to stop container {container} for {package}: {err}");
+                        };
+                    }
+                }
             }
         }
-        if work_units_remaining > 0 && active_containers.len() < config::max_builders() {
-            active_containers.push(start_build_container(&docker, &image).await?);
-            work_units_remaining -= 1;
+        if !packages_to_build.is_empty() && active_containers.len() < config::max_builders() {
+            let package = packages_to_build.pop().unwrap();
+            let container_id = start_build_container(&docker, &image, &package).await?;
+            active_containers.insert(package, container_id);
         }
         clean_up_containers(&docker, &sender, &mut active_containers).await?;
         sleep(Duration::from_millis(100)).await;
     }
 }
 
-async fn start_build_container(docker: &Docker, image: &str) -> Result<String, Error> {
+async fn start_build_container(
+    docker: &Docker,
+    image: &str,
+    package: &Package,
+) -> Result<String, Error> {
     let options: CreateContainerOptions<String> = CreateContainerOptions::default();
+    let env_var = format!("PACKAGE={package}");
     let config = Config {
         image: Some(image),
+        env: Some(vec![&env_var]),
         ..Default::default()
     };
 
     let response = docker.create_container(Some(options), config).await?;
-    info!("Created container {}.", response.id);
+    info!("Created container {} for {package}", response.id);
     if !response.warnings.is_empty() {
         warn!("Encountered warnings:");
     }
@@ -101,12 +119,11 @@ async fn start_build_container(docker: &Docker, image: &str) -> Result<String, E
 async fn clean_up_containers(
     docker: &Docker,
     sender: &Sender<Message>,
-    active_containers: &mut Vec<String>,
+    active_containers: &mut HashMap<Package, String>,
 ) -> Result<(), Error> {
-    let mut active = Vec::with_capacity(active_containers.len());
-    swap(active_containers, &mut active);
-    for id in active {
-        let container = match docker.inspect_container(&id, None).await {
+    let mut removed: Vec<Package> = Vec::new();
+    for (package, id) in active_containers.iter() {
+        let container = match docker.inspect_container(id, None).await {
             Ok(container) => container,
             Err(err) => {
                 warn!("Failed to inspect container {id}: {err}");
@@ -131,14 +148,15 @@ async fn clean_up_containers(
             ContainerStateStatusEnum::EXITED => {
                 if exit_code != 0 {
                     warn!("{id} exited abnormally. Printing logs:");
-                    get_logs(docker, &id).await;
+                    get_logs(docker, id).await;
                     if let Err(err) = sender.send(Message::BuildFailure {
-                        worker: id.to_string(),
+                        worker: (*id).to_string(),
                     }) {
                         error!("Failed to send message: {err}");
                     }
                 }
-                remove_container(docker, &id).await;
+                remove_container(docker, id).await;
+                removed.push(package.to_owned());
                 continue;
             }
             ContainerStateStatusEnum::CREATED
@@ -149,10 +167,12 @@ async fn clean_up_containers(
             | ContainerStateStatusEnum::REMOVING => {
                 warn!("Container ({id}) in unusual state: {status}.");
             }
-            ContainerStateStatusEnum::RUNNING => {
-                active_containers.push(id);
-            }
+            ContainerStateStatusEnum::RUNNING => (),
         }
+    }
+
+    for package in removed {
+        active_containers.remove(&package);
     }
 
     Ok(())

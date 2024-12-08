@@ -7,11 +7,6 @@ pub struct Endpoints {
 
 impl Endpoints {
     #[must_use]
-    pub fn work(&self) -> String {
-        self.url("work")
-    }
-
-    #[must_use]
     pub fn artifacts(&self) -> String {
         self.url("artifacts")
     }

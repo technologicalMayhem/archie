@@ -1,15 +1,13 @@
 mod config;
 
-use coordinator::{abort_if_not_in_docker, Artifacts, WorkAssignment};
+use coordinator::{abort_if_not_in_docker, Artifacts};
 use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::StatusCode;
 use std::collections::HashMap;
 use std::fs::{create_dir_all, exists, read_to_string, remove_dir_all};
-use std::time::Duration;
 use thiserror::Error;
 use time::OffsetDateTime;
 use tokio::process::Command;
-use tracing::{info, log, Level};
+use tracing::{error, info, log, Level};
 use coordinator::endpoints::Endpoints;
 
 #[tokio::main]
@@ -17,7 +15,6 @@ async fn main() -> Result<(), AppError> {
     abort_if_not_in_docker();
     tracing_subscriber::fmt().with_max_level(Level::DEBUG).init();
 
-    let mut sleeping = false;
     let mut headers = HeaderMap::new();
     let hostname = read_to_string("/etc/hostname")?.replace('\n', "");
     info!("Hostname: {hostname}");
@@ -29,21 +26,13 @@ async fn main() -> Result<(), AppError> {
         ..Default::default()
     };
 
-    let work_assignment: WorkAssignment = loop {
-        let response = client.get(endpoints.work()).send().await?;
-        if response.status() == StatusCode::NOT_FOUND {
-            if !sleeping {
-                log::info!("No work available. Waiting.");
-                sleeping = true;
-            }
-            tokio::time::sleep(Duration::from_secs(60)).await;
-            continue;
-        }
-        break response.json().await.expect("Could not read body");
+    let Ok(package) = std::env::var("PACKAGE") else {
+        error!("Failed to read environment variable 'PACKAGE'");
+        std::process::exit(1);
     };
 
-    log::info!("Building {}", work_assignment.package);
-    let artifacts = build_pkg(work_assignment.package).await?;
+    log::info!("Building {}", package);
+    let artifacts = build_pkg(package).await?;
 
     let response = client
         .post(endpoints.artifacts())

@@ -45,11 +45,7 @@ async fn main() -> Result<(), Error> {
         info!("Packages:\n{pkg}");
     }
 
-    set.spawn(web_server::start(
-        receive.resubscribe(),
-        send.clone(),
-        stop_token.child(),
-    ));
+    set.spawn(web_server::start(send.clone(), stop_token.child()));
     set.spawn(orchestrator::start(
         send.clone(),
         receive.resubscribe(),
