@@ -69,7 +69,7 @@ async fn run(
             } else if let Message::RemovePackages(packages) = message {
                 for package in packages {
                     if let Some(container) = active_containers.get(&package) {
-                        println!("Stopping build of package {package}, as it has been removed.");
+                        info!("Stopping build of package {package}, as it has been removed.");
                         if let Err(err) = docker
                             .stop_container(container, Some(StopContainerOptions { t: 0 }))
                             .await
