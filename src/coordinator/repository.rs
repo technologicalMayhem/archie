@@ -58,10 +58,15 @@ async fn run_repository(
             }
             Message::RemovePackages(packages) => {
                 let mut files = Vec::new();
-                for package in &packages {
-                    files.append(&mut state::get_files(package).await);
+                let mut packages_to_remove = Vec::new();
+                for package in packages {
+                    let mut package_files = state::get_files(&package).await;
+                    if !package_files.is_empty() {
+                        files.append(&mut package_files);
+                        packages_to_remove.push(package);
+                    }
                 }
-                remove_from_repo(&repo_name, &files, &packages);
+                remove_from_repo(&repo_name, &files, &packages_to_remove);
             }
             Message::AddPackages(_)
             | Message::BuildPackage(_)
