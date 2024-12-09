@@ -35,6 +35,8 @@ Also, setup instructions are needed for others to actually be able to make use o
 
 Things I want to implement down the line:
 
+- Dependencies for packages coming from the AUR also should be built. They should be marked as dependencies so that when
+  the packages that they were added with gets removed they can be removed too.
 - The CLI tool should be a bit of a pacman wrapper
     - If a package gets removed it should ask whether to invoke 'pacman -Rs \<package\>'
     - When package gets added, there should be the option to invoke 'pacman -Sy \<package\>' when it finished being
