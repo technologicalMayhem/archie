@@ -25,6 +25,7 @@ RUN cargo build --release
 # ------------------------------------------------------------------------------
 
 FROM archlinux AS coordinator
+RUN mkdir "/output" "/config"
 WORKDIR /home/coordinator/bin/
 COPY --from=builder /app/target/release/coordinator .
 CMD ["./coordinator"]
