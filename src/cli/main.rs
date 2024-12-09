@@ -9,6 +9,7 @@ use thiserror::Error;
 use tracing::{error, Level};
 use tracing_subscriber::FmtSubscriber;
 use crate::log_formatter::ColorFormatter;
+use ureq::ErrorKind;
 
 #[derive(Parser)]
 struct Arguments {
@@ -49,14 +50,31 @@ fn main() -> Result<ExitCode, Error> {
         return Ok(ExitCode::FAILURE);
     }
 
-    let exit_code = match args.action {
-        Action::Add(add) => actions::add(&config, add)?,
-        Action::Remove(remove) => actions::remove(&config, remove)?,
-        Action::Status => actions::status(&config)?,
-        Action::Init => config::init(&mut config, &args.profile)?,
+    let result = match args.action {
+        Action::Add(add) => actions::add(&config, add),
+        Action::Remove(remove) => actions::remove(&config, remove),
+        Action::Status => actions::status(&config),
+        Action::Init => config::init(&mut config, &args.profile).map_err(Error::from),
     };
 
+    let exit_code = try_to_interpret_error(result)?;
     Ok(ExitCode::from(exit_code))
+}
+
+/// Tries to get more information to display to the user from the error.
+fn try_to_interpret_error(result: Result<u8, Error>) -> Result<u8, Error> {
+    Ok(match result {
+        Ok(exit_code) => exit_code,
+        Err(Error::Request(err)) => match err.kind() {
+            ErrorKind::Dns | ErrorKind::ConnectionFailed | ErrorKind::TooManyRedirects => {
+                let transport = err.into_transport().unwrap();
+                error!("{transport}");
+                1
+            }
+            _ => return Err(Error::Request(err)),
+        },
+        Err(err) => return Err(err),
+    })
 }
 
 #[derive(Debug, Error)]
