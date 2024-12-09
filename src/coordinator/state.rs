@@ -29,15 +29,9 @@ struct Persistent {
     pub package_status: HashMap<Package, Option<PackageStatus>>,
 }
 
-#[derive(Default)]
-struct Ephermal {
-    repository_locked: bool,
-}
-
 #[derive(Clone)]
 struct State {
     persistent: Arc<RwLock<Persistent>>,
-    ephemeral: Arc<RwLock<Ephermal>>,
 }
 
 fn load_state() -> Result<State, Error> {
@@ -51,7 +45,6 @@ fn load_state() -> Result<State, Error> {
 
     Ok(State {
         persistent: Arc::new(RwLock::new(persistent)),
-        ephemeral: Arc::new(RwLock::new(Ephermal::default())),
     })
 }
 
@@ -183,18 +176,6 @@ pub async fn remove_packages(package: &HashSet<Package>) {
 
     drop(persistent);
     save_state().await;
-}
-
-pub async fn lock_repo() {
-    STATE.ephemeral.write().await.repository_locked = true;
-}
-
-pub async fn unlock_repo() {
-    STATE.ephemeral.write().await.repository_locked = false;
-}
-
-pub async fn is_repo_locked() -> bool {
-    STATE.ephemeral.read().await.repository_locked
 }
 
 #[derive(Debug, Error)]

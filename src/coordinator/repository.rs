@@ -47,14 +47,12 @@ async fn run_repository(
             } => {
                 info!("Successfully built {}", package);
 
-                state::lock_repo().await;
                 if add_to_repo(&repo_name, &files) {
                     state::build_package(&package, build_time, files).await;
                     if let Err(err) = sender.send(Message::BuildSuccess(package.clone())) {
                         error!("Failed to send message: {err}");
                     }
                 }
-                state::unlock_repo().await;
             }
             Message::RemovePackages(packages) => {
                 let mut files = Vec::new();
@@ -80,8 +78,6 @@ async fn run_repository(
 }
 
 async fn recreate_repo(repo_name: &str) {
-    state::lock_repo().await;
-
     info!("Recreating repository");
 
     let repo_files = vec![
@@ -102,8 +98,6 @@ async fn recreate_repo(repo_name: &str) {
     let files = state::get_all_files().await;
 
     add_to_repo(repo_name, &files);
-
-    state::unlock_repo().await;
 }
 
 fn add_to_repo(repo_name: &str, files: &Vec<String>) -> bool {
