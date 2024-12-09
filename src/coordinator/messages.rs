@@ -1,9 +1,11 @@
+use std::collections::HashSet;
+
 pub type Package = String;
 
 #[derive(Clone)]
 pub enum Message {
-    AddPackages(Vec<Package>),
-    RemovePackages(Vec<Package>),
+    AddPackages(HashSet<Package>),
+    RemovePackages(HashSet<Package>),
     BuildPackage(Package),
     BuildSuccess(Package),
     BuildFailure(Package),

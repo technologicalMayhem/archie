@@ -1,12 +1,15 @@
-use crate::messages::{Message, Package};
+use crate::messages::Message;
 use crate::repository::REPO_DIR;
 use crate::stop_token::StopToken;
-use crate::{config, state};
+use crate::{aur, config, state};
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use coordinator::{Artifacts, RemovePackages, Status, WorkOrders};
+use coordinator::{
+    AddPackages, AddPackagesResponse, Artifacts, RemovePackages, RemovePackagesResponse, Status,
+};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::Sender;
@@ -58,14 +61,38 @@ pub async fn start(sender: Sender<Message>, mut stop_token: StopToken) {
 
 async fn add_package(
     state: State<RequestState>,
-    Json(work): Json<WorkOrders>,
-) -> Result<(), StatusCode> {
-    state.send_message(Message::AddPackages(
-        work.packages
-            .into_iter()
-            .map(|pkg| pkg.package as Package)
-            .collect(),
-    ))
+    Json(add): Json<AddPackages>,
+) -> Result<Json<AddPackagesResponse>, StatusCode> {
+    let package_info = aur::do_packages_exist(&add.packages).await.map_err(|err| {
+        error!("Failed to get packages from the AUR: {err}");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    let tracked_packages = state::tracked_packages().await;
+
+    let not_found: HashSet<String> = add
+        .packages
+        .difference(&package_info)
+        .map(String::to_owned)
+        .collect();
+    let already_tracked: HashSet<String> = tracked_packages
+        .intersection(&add.packages)
+        .map(String::to_owned)
+        .collect();
+    let to_be_added: HashSet<String> = add
+        .packages
+        .difference(&tracked_packages)
+        .map(String::to_owned)
+        .collect();
+
+    if !to_be_added.is_empty() {
+        state.send_message(Message::AddPackages(to_be_added.clone()))?;
+    }
+
+    Ok(Json(AddPackagesResponse {
+        added: to_be_added,
+        not_found,
+        already_tracked,
+    }))
 }
 
 async fn receive_artifacts(
@@ -103,13 +130,32 @@ async fn receive_artifacts(
 async fn remove_package(
     state: State<RequestState>,
     Json(remove): Json<RemovePackages>,
-) -> Result<(), StatusCode> {
-    state.send_message(Message::RemovePackages(remove.packages))
+) -> Result<Json<RemovePackagesResponse>, StatusCode> {
+    let tracked_packages = state::tracked_packages().await;
+    let not_tracked: HashSet<String> = remove
+        .packages
+        .difference(&tracked_packages)
+        .map(String::to_owned)
+        .collect();
+
+    let to_be_removed: HashSet<String> = tracked_packages
+        .intersection(&remove.packages)
+        .map(String::to_owned)
+        .collect();
+
+    if !to_be_removed.is_empty() {
+        state.send_message(Message::RemovePackages(to_be_removed.clone()))?;
+    }
+
+    Ok(Json(RemovePackagesResponse {
+        removed: to_be_removed,
+        not_tracked,
+    }))
 }
 
 async fn status() -> Json<Status> {
     Json(Status {
-        packages: state::packages().await,
+        packages: state::tracked_packages().await,
     })
 }
 

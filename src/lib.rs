@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 pub mod endpoints;
@@ -12,13 +12,15 @@ pub fn abort_if_not_in_docker() {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct WorkOrders {
-    pub packages: Vec<WorkAssignment>,
+pub struct AddPackages {
+    pub packages: HashSet<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct WorkAssignment {
-    pub package: String,
+pub struct AddPackagesResponse {
+    pub added: HashSet<String>,
+    pub already_tracked: HashSet<String>,
+    pub not_found: HashSet<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -30,12 +32,18 @@ pub struct Artifacts {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Status {
-    pub packages: Vec<String>,
+    pub packages: HashSet<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RemovePackages {
-    pub packages: Vec<String>
+    pub packages: HashSet<String>
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RemovePackagesResponse {
+    pub removed: HashSet<String>,
+    pub not_tracked: HashSet<String>
 }
 
 pub fn env_or<T>(var: &str, or: T) -> T

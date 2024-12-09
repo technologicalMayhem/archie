@@ -8,7 +8,6 @@ use thiserror::Error;
 use tracing::error;
 
 const CONFIG_DIR: &str = ".config/archie";
-const CONFIG_FILE: &str = "config.toml";
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct Config {
@@ -57,13 +56,13 @@ fn config_dir() -> PathBuf {
     home_dir.join(CONFIG_DIR)
 }
 
-fn config_path() -> PathBuf {
-    config_dir().join(CONFIG_FILE)
+fn config_path(profile: &str) -> PathBuf {
+    config_dir().join(format!("{profile}.toml"))
 }
 
-pub fn load() -> Config {
+pub fn load(profile: &str) -> Config {
     let figment = Figment::from(Serialized::defaults(Config::default()))
-        .merge(Toml::file(config_path()))
+        .merge(Toml::file(config_path(profile)))
         .merge(Env::prefixed("ARCHIE_"))
         .extract::<Config>();
     match figment {
@@ -75,15 +74,15 @@ pub fn load() -> Config {
     }
 }
 
-pub fn save(config: &Config) -> Result<(), Error> {
+pub fn save(config: &Config, profile: &str) -> Result<(), Error> {
     std::fs::DirBuilder::new()
         .recursive(true)
         .create(config_dir())?;
-    std::fs::write(config_path(), toml::ser::to_string_pretty(&config)?)?;
+    std::fs::write(config_path(profile), toml::ser::to_string_pretty(&config)?)?;
     Ok(())
 }
 
-pub fn init(config: &mut Config) -> Result<(), Error> {
+pub fn init(config: &mut Config, profile: &str) -> Result<u8, Error> {
     let stdin = stdin();
     let mut stdout = stdout();
 
@@ -142,10 +141,10 @@ pub fn init(config: &mut Config) -> Result<(), Error> {
     }
 
     config.initialized = true;
-    save(config)?;
+    save(config, profile)?;
     println!("Setup complete!");
 
-    Ok(())
+    Ok(0)
 }
 
 #[derive(Debug, Error)]

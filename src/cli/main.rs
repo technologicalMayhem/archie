@@ -1,6 +1,8 @@
 mod actions;
 mod config;
+mod util;
 
+use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use thiserror::Error;
 use tracing::error;
@@ -13,6 +15,9 @@ use tracing_subscriber::util::SubscriberInitExt;
 struct Arguments {
     #[command(subcommand)]
     action: Action,
+    /// Name of the profile to use
+    #[arg(long, default_value = "config" )]
+    profile: String
 }
 
 #[derive(Subcommand, Clone)]
@@ -27,28 +32,28 @@ enum Action {
     Init,
 }
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<ExitCode, Error> {
     tracing_subscriber::registry()
         .with(LevelFilter::INFO)
         .with(fmt::layer().without_time())
         .init();
     let args = Arguments::parse();
 
-    let mut config = config::load();
+    let mut config = config::load(&args.profile);
 
     if !config.initialized && !matches!(args.action, Action::Init) {
         println!("Archie's config is not set up. Run 'archie init' to set it up.");
-        return Ok(());
+        return Ok(ExitCode::FAILURE);
     }
 
-    match args.action {
+    let exit_code = match args.action {
         Action::Add(add) => actions::add(&config, add)?,
         Action::Remove(remove) => actions::remove(&config, remove)?,
         Action::Status => actions::status(&config)?,
-        Action::Init => config::init(&mut config)?,
-    }
+        Action::Init => config::init(&mut config, &args.profile)?,
+    };
 
-    Ok(())
+    Ok(ExitCode::from(exit_code))
 }
 
 #[derive(Debug, Error)]

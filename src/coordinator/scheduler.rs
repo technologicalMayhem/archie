@@ -1,10 +1,10 @@
-use crate::aur::get_last_modified_from_aur;
+use crate::aur::get_last_modified;
 use crate::messages::{Message, Package};
 use crate::scheduler::Error::CouldNotReachAUR;
 use crate::state;
-use crate::state::{get_build_times, get_last_check, packages, set_last_check};
+use crate::state::{get_build_times, get_last_check, set_last_check, tracked_packages};
 use crate::stop_token::StopToken;
-use bimap::{BiHashMap, BiMap};
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::time::Duration;
 use time::OffsetDateTime;
@@ -71,7 +71,7 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
                 }
                 Message::RemovePackages(packages) => {
                     state::remove_packages(&packages).await;
-                    info!("Stopped tracking {}", packages.join(", "));
+                    info!("Stopped tracking {}", packages.iter().join(", "));
                 }
                 Message::BuildSuccess(package) => {
                     retries.remove(&package);
@@ -105,7 +105,7 @@ async fn check_for_package_updates(
     let now = OffsetDateTime::now_utc().unix_timestamp();
     let mut packages_to_check = Vec::new();
     let mut never_built = Vec::new();
-    for package in packages().await {
+    for package in tracked_packages().await {
         if let Some(last_check) = get_last_check(&package).await {
             if last_check + TIMEOUT <= now {
                 packages_to_check.push(package);
@@ -115,7 +115,7 @@ async fn check_for_package_updates(
         }
     }
 
-    let last_modified = match get_last_modified_from_aur(&packages_to_check).await {
+    let last_modified = match get_last_modified(&packages_to_check).await {
         Ok(last_modified) => last_modified,
         Err(err) => {
             error!("Failed to lookup package info in the AUR: {err}");

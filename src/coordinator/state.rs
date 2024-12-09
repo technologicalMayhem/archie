@@ -1,6 +1,6 @@
 use crate::messages::Package;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{exists, read_to_string};
 use std::sync::{Arc, LazyLock};
 use thiserror::Error;
@@ -87,7 +87,7 @@ pub async fn track_package(package: &Package) {
     save_state().await;
 }
 
-pub async fn packages() -> Vec<String> {
+pub async fn tracked_packages() -> HashSet<Package> {
     STATE
         .persistent
         .read()
@@ -174,7 +174,7 @@ pub async fn is_package_tracked(package: &Package) -> bool {
         .contains_key(package)
 }
 
-pub async fn remove_packages(package: &Vec<Package>) {
+pub async fn remove_packages(package: &HashSet<Package>) {
     let mut persistent = STATE.persistent.write().await;
 
     for package in package {
