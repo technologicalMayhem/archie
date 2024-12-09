@@ -1,15 +1,14 @@
 mod actions;
 mod config;
 mod util;
+mod log_formatter;
 
 use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use thiserror::Error;
-use tracing::error;
-use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::fmt;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
+use tracing::{error, Level};
+use tracing_subscriber::FmtSubscriber;
+use crate::log_formatter::ColorFormatter;
 
 #[derive(Parser)]
 struct Arguments {
@@ -33,10 +32,14 @@ enum Action {
 }
 
 fn main() -> Result<ExitCode, Error> {
-    tracing_subscriber::registry()
-        .with(LevelFilter::INFO)
-        .with(fmt::layer().without_time())
-        .init();
+    let subscriber = FmtSubscriber::builder()
+        .event_format(ColorFormatter)
+        .with_max_level(Level::TRACE) // Log all levels
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("setting default subscriber failed");
+
     let args = Arguments::parse();
 
     let mut config = config::load(&args.profile);
