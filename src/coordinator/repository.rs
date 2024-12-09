@@ -1,3 +1,4 @@
+use std::fs::exists;
 use crate::messages::{Message, Package};
 use crate::stop_token::StopToken;
 use crate::{config, state};
@@ -115,6 +116,10 @@ fn add_to_repo(repo_name: &str, files: &Vec<String>) -> bool {
 }
 
 fn remove_from_repo(repo_name: &str, files: &Vec<String>, packages: &Vec<Package>) -> bool {
+    if !exists(PathBuf::new().join(REPO_DIR).join(format!("{repo_name}.db.tar.zst"))).unwrap_or(false) {
+        return false;
+    }
+
     let mut command = Command::new(REPO_REMOVE);
     command.current_dir(REPO_DIR);
     command.args([&format!("{repo_name}.db.tar.zst")]);
@@ -142,9 +147,9 @@ fn run_command(mut command: Command) -> bool {
 
     if !output.status.success() {
         if let Some(exit_code) = output.status.code() {
-            error!("{REPO_ADD} failed with exit code {exit_code}",);
+            error!("{:?} failed with exit code {exit_code}", command.get_args());
         } else {
-            error!("{REPO_ADD} was terminated by a signal");
+            error!("{:?} was terminated by a signal", command.get_args());
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
