@@ -72,10 +72,16 @@ async fn run(
                     if let Some(index) = packages_to_build.iter().position(|to_build| **to_build == package) {
                         packages_to_build.remove(index);
                     }
-                    if let Some(container) = active_containers.get(&package) {
+                    if let Some(container) = active_containers.remove(&package) {
                         info!("Stopping build of package {package}, as it has been removed.");
                         if let Err(err) = docker
-                            .stop_container(container, Some(StopContainerOptions { t: 0 }))
+                            .stop_container(&container, Some(StopContainerOptions { t: 0 }))
+                            .await
+                        {
+                            error!("Failed to stop container {container} for {package}: {err}");
+                        };
+                        if let Err(err) = docker
+                            .remove_container(&container, None)
                             .await
                         {
                             error!("Failed to stop container {container} for {package}: {err}");
