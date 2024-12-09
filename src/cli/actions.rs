@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::util::combine_for_display;
+use crate::util::{combine_for_display, wrap_text};
 use crate::Error;
 use clap::Args;
 use colored::Colorize;
@@ -7,6 +7,7 @@ use coordinator::endpoints::Endpoints;
 use coordinator::{
     AddPackages, AddPackagesResponse, RemovePackages, RemovePackagesResponse, Status,
 };
+use std::fs::read_to_string;
 use tracing::{error, info, warn};
 use ureq::Agent;
 
@@ -117,10 +118,50 @@ pub fn status(config: &Config) -> Result<u8, Error> {
         .map_err(Box::new)?
         .into_json()?;
 
-    println!("{}", "Packages:".bold());
-    for package in status.packages {
-        println!("- {}", package.green());
+    let mut warnings = Vec::new();
+    let package_text_block = wrap_text(&combine_for_display(&status.packages), 80);
+
+    match check_for_repository(config) {
+        Ok(true) => (),
+        Ok(false) => {
+            warnings.push("Your pacman.conf does not seem to contain the servers repository");
+        }
+        Err(_) => warnings
+            .push("Could not check if pacman is set up correctly. Could not read pacman.conf"),
+    };
+
+    info!(
+        "Querying {} on port {}",
+        config.server.address.green(),
+        config.server.port.to_string().green()
+    );
+    info!("");
+    if warnings.is_empty() {
+        info!("No issues found!");
+    } else {
+        warn!("Warnings:");
+        for warning in warnings {
+            warn!("{warning}");
+        }
     }
+    info!("");
+    info!("{}", "Tracked packages:".bold());
+    info!("{package_text_block}");
 
     Ok(0)
+}
+
+fn check_for_repository(config: &Config) -> Result<bool, std::io::Error> {
+    let pacman_conf = read_to_string("/etc/pacman.conf")?;
+    let port = if config.server.port == 80 && !config.server.https
+        || config.server.port == 443 && config.server.https
+    {
+        String::new()
+    } else {
+        format!(":{}", config.server.port)
+    };
+
+    let directive = format!("{}{port}/repo", config.server.address);
+
+    Ok(pacman_conf.lines().any(|line| line.contains(&directive)))
 }
