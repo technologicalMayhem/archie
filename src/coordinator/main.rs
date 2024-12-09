@@ -46,6 +46,7 @@ async fn main() -> Result<(), Error> {
         info!("Packages:\n{pkg}");
     }
 
+    set.spawn(aur::update_non_aur_packages(stop_token.child()));
     set.spawn(web_server::start(send.clone(), stop_token.child()));
     set.spawn(orchestrator::start(
         send.clone(),

@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{exists, read_to_string};
 use std::sync::{Arc, LazyLock};
 use thiserror::Error;
+use time::OffsetDateTime;
 use tokio::fs::write;
 use tokio::sync::RwLock;
 use tracing::error;
@@ -18,15 +19,22 @@ static STATE: LazyLock<State> = LazyLock::new(|| match load_state() {
 });
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct PackageStatus {
-    pub last_build: i64,
+pub struct PackageInfo {
     pub last_check: i64,
+    pub is_dependency: bool,
+    pub dependencies: HashSet<Package>,
+    pub build: Option<Build>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Build {
+    pub time: i64,
     pub files: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
 struct Persistent {
-    pub package_status: HashMap<Package, Option<PackageStatus>>,
+    pub package_status: HashMap<Package, PackageInfo>,
 }
 
 #[derive(Clone)]
@@ -59,23 +67,29 @@ async fn save_state() {
     }
 }
 
-pub async fn build_package(package_name: &str, build_time: i64, files: Vec<String>) {
+pub async fn build_package(package: &Package, build_time: i64, files: Vec<String>) {
     let mut state = STATE.persistent.write().await;
-    state.package_status.insert(
-        package_name.to_string(),
-        Some(PackageStatus {
-            last_build: build_time,
-            last_check: build_time,
+    if let Some(status) = state.package_status.get_mut(package) {
+        status.build = Some(Build {
+            time: build_time,
             files,
-        }),
-    );
+        });
+    }
     drop(state);
     save_state().await;
 }
 
-pub async fn track_package(package: &Package) {
+pub async fn track_package(package: &Package, dependencies: HashSet<Package>, is_dependency: bool) {
     let mut state = STATE.persistent.write().await;
-    state.package_status.insert(package.to_string(), None);
+    state.package_status.insert(
+        package.to_string(),
+        PackageInfo {
+            build: None,
+            is_dependency,
+            dependencies,
+            last_check: OffsetDateTime::now_utc().unix_timestamp(),
+        },
+    );
     drop(state);
     save_state().await;
 }
@@ -91,6 +105,44 @@ pub async fn tracked_packages() -> HashSet<Package> {
         .collect()
 }
 
+async fn all_dependencies() -> HashSet<Package> {
+    STATE
+        .persistent
+        .read()
+        .await
+        .package_status
+        .iter()
+        .filter_map(|(pkg, info)| {
+            if info.is_dependency {
+                Some(pkg.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+async fn required_dependencies() -> HashSet<Package> {
+    STATE
+        .persistent
+        .read()
+        .await
+        .package_status
+        .values()
+        .flat_map(|info| info.dependencies.clone())
+        .collect()
+}
+
+pub async fn unneeded_dependencies() -> HashSet<Package> {
+    let all_dependencies = all_dependencies().await;
+    let required_dependencies = required_dependencies().await;
+
+    all_dependencies
+        .difference(&required_dependencies)
+        .map(String::clone)
+        .collect()
+}
+
 pub async fn get_last_check(package_name: &str) -> Option<i64> {
     STATE
         .persistent
@@ -98,11 +150,11 @@ pub async fn get_last_check(package_name: &str) -> Option<i64> {
         .await
         .package_status
         .get(package_name)
-        .and_then(|pkg| pkg.as_ref().map(|pkg| pkg.last_check))
+        .map(|pkg| pkg.last_check)
 }
 
 pub async fn set_last_check(package_name: &str, last_check: i64) {
-    if let Some(Some(status)) = STATE
+    if let Some(status) = STATE
         .persistent
         .write()
         .await
@@ -122,8 +174,8 @@ pub async fn get_build_times(packages: &[String]) -> Vec<(&str, i64)> {
         .filter_map(|pkg| {
             states
                 .get(pkg)
-                .and_then(Option::as_ref)
-                .map(|status| (pkg.as_str(), status.last_build))
+                .and_then(|info| info.build.as_ref())
+                .map(|status| (pkg.as_str(), status.time))
         })
         .collect()
 }
@@ -137,7 +189,7 @@ pub async fn get_files(package: &Package) -> Vec<String> {
         .iter()
         .filter_map(|(name, status)| {
             if name == package {
-                status.as_ref().map(|status| status.files.clone())
+                status.build.as_ref().map(|status| status.files.clone())
             } else {
                 None
             }
@@ -153,7 +205,7 @@ pub async fn get_all_files() -> Vec<String> {
         .await
         .package_status
         .iter()
-        .filter_map(|(_, status)| status.as_ref().map(|status| status.files.clone()))
+        .filter_map(|(_, info)| info.build.as_ref().map(|status| status.files.clone()))
         .flatten()
         .collect()
 }

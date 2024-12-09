@@ -24,7 +24,7 @@ RUN cargo build --release
 # Final Stage
 # ------------------------------------------------------------------------------
 
-FROM archlinux AS coordinator
+FROM archlinux:multilib-devel AS coordinator
 RUN mkdir "/output" "/config"
 WORKDIR /home/coordinator/bin/
 COPY --from=builder /app/target/release/coordinator .

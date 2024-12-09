@@ -5,6 +5,7 @@ pub type Package = String;
 #[derive(Clone)]
 pub enum Message {
     AddPackages(HashSet<Package>),
+    AddDependencies(HashSet<Package>),
     RemovePackages(HashSet<Package>),
     BuildPackage(Package),
     BuildSuccess(Package),

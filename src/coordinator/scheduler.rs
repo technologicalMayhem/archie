@@ -1,11 +1,11 @@
 use crate::aur::get_last_modified;
 use crate::messages::{Message, Package};
 use crate::scheduler::Error::CouldNotReachAUR;
-use crate::{config, state};
 use crate::state::{get_build_times, get_last_check, set_last_check, tracked_packages};
 use crate::stop_token::StopToken;
+use crate::{aur, config, state};
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use time::OffsetDateTime;
 use tokio::select;
@@ -61,17 +61,18 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
         match message {
             Some(Ok(message)) => match message {
                 Message::AddPackages(packages) => {
-                    for package in packages {
-                        if !state::is_package_tracked(&package).await {
-                            info!("Added new package {package}");
-                            state::track_package(&package).await;
-                            send_message(&sender, Message::BuildPackage(package));
-                        }
-                    }
+                    add_package(&sender, packages, false).await;
+                }
+                Message::AddDependencies(packages) => {
+                    add_package(&sender, packages, true).await;
                 }
                 Message::RemovePackages(packages) => {
                     state::remove_packages(&packages).await;
                     info!("Stopped tracking {}", packages.iter().join(", "));
+                    let unneeded = state::unneeded_dependencies().await;
+                    if !unneeded.is_empty() {
+                        send_message(&sender, Message::RemovePackages(unneeded));
+                    }
                 }
                 Message::BuildSuccess(package) => {
                     retries.remove(&package);
@@ -94,6 +95,36 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
             }
             _ => (),
         }
+    }
+}
+
+async fn add_package(sender: &Sender<Message>, packages: HashSet<Package>, dependencies: bool) {
+    let aur_dependencies = match aur::get_dependencies(&packages).await {
+        Ok(deps) => deps,
+        Err(err) => {
+            error!(
+                "Failed to fetch dependencies for {packages:?}. Could not add them. Error: {err}"
+            );
+            return;
+        }
+    };
+
+    let mut dependency_copies = aur_dependencies.clone();
+    for package in packages {
+        if !state::is_package_tracked(&package).await {
+            let Some(package_dependencies) = dependency_copies.remove(&package) else {
+                error!("Failed to get dependencies for {package}. This should not happen");
+                continue;
+            };
+            state::track_package(&package, package_dependencies, dependencies).await;
+            info!("Added new package {package}");
+            send_message(sender, Message::BuildPackage(package));
+        }
+    }
+
+    let dependencies: HashSet<Package> = aur_dependencies.into_values().flatten().collect();
+    if !dependencies.is_empty() {
+        send_message(sender, Message::AddDependencies(dependencies));
     }
 }
 
