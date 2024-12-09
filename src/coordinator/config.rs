@@ -1,6 +1,6 @@
+use coordinator::env_or;
 use std::sync::LazyLock;
 use tracing::info;
-use coordinator::env_or;
 
 static CONFIG: LazyLock<Config> = LazyLock::new(load);
 

@@ -125,7 +125,7 @@ pub fn init(config: &mut Config, profile: &str) -> Result<u8, Error> {
         stdin.read_line(&mut buffer)?;
         let buffer = buffer.trim_end();
         if buffer.is_empty() {
-            break
+            break;
         }
         match buffer.chars().next() {
             Some('N' | 'n') => {

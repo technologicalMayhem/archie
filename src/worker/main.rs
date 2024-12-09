@@ -1,5 +1,4 @@
-mod config;
-
+use coordinator::endpoints::Endpoints;
 use coordinator::{abort_if_not_in_docker, Artifacts};
 use reqwest::header::{HeaderMap, HeaderValue};
 use std::collections::HashMap;
@@ -8,18 +7,21 @@ use thiserror::Error;
 use time::OffsetDateTime;
 use tokio::process::Command;
 use tracing::{error, info, log, Level};
-use coordinator::endpoints::Endpoints;
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
     abort_if_not_in_docker();
-    tracing_subscriber::fmt().with_max_level(Level::DEBUG).init();
+    tracing_subscriber::fmt()
+        .with_max_level(Level::DEBUG)
+        .init();
 
     let mut headers = HeaderMap::new();
     let hostname = read_to_string("/etc/hostname")?.replace('\n', "");
     info!("Hostname: {hostname}");
     headers.insert("hostname", HeaderValue::from_str(&hostname)?);
-    let client = reqwest::Client::builder().default_headers(headers).build()?;
+    let client = reqwest::Client::builder()
+        .default_headers(headers)
+        .build()?;
     let endpoints = Endpoints {
         address: "172.17.0.1".to_string(),
         https: false,

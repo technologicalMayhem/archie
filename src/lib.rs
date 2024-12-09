@@ -37,13 +37,13 @@ pub struct Status {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RemovePackages {
-    pub packages: HashSet<String>
+    pub packages: HashSet<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RemovePackagesResponse {
     pub removed: HashSet<String>,
-    pub not_tracked: HashSet<String>
+    pub not_tracked: HashSet<String>,
 }
 
 pub fn env_or<T>(var: &str, or: T) -> T

@@ -1,14 +1,14 @@
 mod actions;
 mod config;
-mod util;
 mod log_formatter;
+mod util;
 
-use std::process::ExitCode;
+use crate::log_formatter::ColorFormatter;
 use clap::{Parser, Subcommand};
+use std::process::ExitCode;
 use thiserror::Error;
 use tracing::{error, Level};
 use tracing_subscriber::FmtSubscriber;
-use crate::log_formatter::ColorFormatter;
 use ureq::ErrorKind;
 
 #[derive(Parser)]
@@ -16,8 +16,8 @@ struct Arguments {
     #[command(subcommand)]
     action: Action,
     /// Name of the profile to use
-    #[arg(long, default_value = "config" )]
-    profile: String
+    #[arg(long, default_value = "config")]
+    profile: String,
 }
 
 #[derive(Subcommand, Clone)]
@@ -38,8 +38,7 @@ fn main() -> Result<ExitCode, Error> {
         .with_max_level(Level::TRACE) // Log all levels
         .finish();
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
     let args = Arguments::parse();
 
