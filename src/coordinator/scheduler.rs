@@ -1,7 +1,7 @@
 use crate::aur::get_last_modified;
 use crate::messages::{Message, Package};
 use crate::scheduler::Error::CouldNotReachAUR;
-use crate::state;
+use crate::{config, state};
 use crate::state::{get_build_times, get_last_check, set_last_check, tracked_packages};
 use crate::stop_token::StopToken;
 use itertools::Itertools;
@@ -42,7 +42,7 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
 
         if next_retry_check < now {
             for (package, attempt) in &retries {
-                if *attempt < 3 {
+                if *attempt < config::max_retries() {
                     info!("Retrying build for {package}");
                     send_message(&sender, Message::BuildPackage(package.clone()));
                 }
