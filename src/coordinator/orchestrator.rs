@@ -11,6 +11,7 @@ use futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use itertools::Itertools;
 use thiserror::Error;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::time::sleep;
@@ -68,6 +69,9 @@ async fn run(
                 packages_to_build.push(package);
             } else if let Message::RemovePackages(packages) = message {
                 for package in packages {
+                    if let Some(index) = packages_to_build.iter().position(|to_build| **to_build == package) {
+                        packages_to_build.remove(index);
+                    }
                     if let Some(container) = active_containers.get(&package) {
                         info!("Stopping build of package {package}, as it has been removed.");
                         if let Err(err) = docker
