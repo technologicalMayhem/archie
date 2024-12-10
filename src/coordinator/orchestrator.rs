@@ -11,7 +11,6 @@ use futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use itertools::Itertools;
 use thiserror::Error;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::time::sleep;
