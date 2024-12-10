@@ -1,0 +1,13 @@
+services:
+  coordinator:
+    image: aur_coordinator
+    environment:
+      BUILDER_IMAGE: "aur_worker"
+      PORT: 3200
+    volumes:
+      - ./container/output:/output
+      - ./container/config:/config
+      - /var/run/docker.sock:/var/run/docker.sock
+    privileged: true
+    ports:
+      - "3200:3200"
