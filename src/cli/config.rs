@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{stdin, stdout, Write};
 use std::path::PathBuf;
 use thiserror::Error;
-use tracing::error;
+use tracing::{error, warn};
 
 const CONFIG_DIR: &str = ".config/archie";
 
@@ -86,7 +86,9 @@ pub fn init(config: &mut Config, profile: &str) -> Result<u8, Error> {
     let stdin = stdin();
     let mut stdout = stdout();
 
-    println!("This seems to be the first running archie. Let's set thing up!");
+    warn!("Right now using backspace does not work. You have to enter everything correctly first try");
+    warn!("If you do mistype, just exit out with CTRL-C and run 'init' again");
+    println!("Let's set things up!");
     println!("What is the address of the coordinator?");
     print!("Address [{}]: ", config.server.address);
     stdout.flush()?;
