@@ -16,7 +16,7 @@ struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            max_builders: 3,
+            max_builders: 1,
             max_retries: 3,
             port: 3200,
             image: "aur_worker".to_string(),
