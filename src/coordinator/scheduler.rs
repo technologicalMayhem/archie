@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 use tokio::select;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{Receiver, Sender};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 const TIMEOUT: i64 = 4 * 60 * 60; // 4 Hours
 const RETRY_TIME: i64 = 5 * 60; // 5 minutes
@@ -113,7 +113,7 @@ async fn add_package(sender: &Sender<Message>, packages: HashSet<Package>, depen
     for package in packages {
         if !state::is_package_tracked(&package).await {
             let Some(package_dependencies) = dependency_copies.remove(&package) else {
-                error!("Failed to get dependencies for {package}. This should not happen");
+                warn!("Failed to get dependencies for {package}. This might mean it is a meta package");
                 continue;
             };
             state::track_package(&package, package_dependencies, dependencies).await;
