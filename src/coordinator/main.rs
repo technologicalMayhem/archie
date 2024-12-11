@@ -38,8 +38,7 @@ async fn main() -> Result<(), Error> {
     let mut set = JoinSet::new();
     let mut stop_token = StopToken::new();
     let (send, receive) = channel::<Message>(128);
-
-    info!("Starting application");
+    
     let pkg = state::tracked_packages().await;
     if pkg.is_empty() {
         info!("No packages being managed right now");

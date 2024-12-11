@@ -39,7 +39,6 @@ async fn run(
     let mut packages_to_build = Vec::new();
     let mut active_containers: HashMap<Package, String> = HashMap::new();
 
-    info!("Starting");
     loop {
         if stop_token.stopped() {
             let docker = Arc::new(docker);

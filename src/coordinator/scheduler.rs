@@ -17,7 +17,6 @@ const TIMEOUT: i64 = 4 * 60 * 60; // 4 Hours
 const RETRY_TIME: i64 = 5 * 60; // 5 minutes
 
 pub async fn start(sender: Sender<Message>, receiver: Receiver<Message>, token: StopToken) {
-    info!("Starting");
     run(sender, receiver, token).await;
     info!("Stopping scheduler");
 }

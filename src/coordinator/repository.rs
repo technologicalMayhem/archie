@@ -8,7 +8,7 @@ use thiserror::Error;
 use tokio::fs::{remove_file, try_exists};
 use tokio::select;
 use tokio::sync::broadcast::{Receiver, Sender};
-use tracing::error;
+use tracing::{debug, error};
 use tracing::log::info;
 
 pub const REPO_DIR: &str = "/output/";
@@ -26,7 +26,6 @@ async fn run_repository(
     mut receive: Receiver<Message>,
     mut stop_token: StopToken,
 ) -> Result<(), Error> {
-    info!("Starting");
     let repo_name = config::repo_name();
 
     recreate_repo(&repo_name).await;
@@ -80,7 +79,7 @@ async fn run_repository(
 }
 
 async fn recreate_repo(repo_name: &str) {
-    info!("Recreating repository");
+    debug!("Recreating repository");
 
     let repo_files = vec![
         format!("{REPO_DIR}{repo_name}.db"),
