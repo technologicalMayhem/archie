@@ -1,7 +1,7 @@
 use std::process::Command;
 
 fn main() {
-    let Ok(describe_out) = Command::new("git").args(["describe", "--dirty", "--broken", "--tags"]).output() else {
+    let Ok(describe_out) = Command::new("git").args(["describe", "--tags"]).output() else {
         eprintln!("Failed to run 'git describe'");
         return;
     };
