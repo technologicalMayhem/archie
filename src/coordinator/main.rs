@@ -8,6 +8,7 @@ mod state;
 mod stop_token;
 mod web_server;
 
+use std::env::var;
 use crate::messages::Message;
 use crate::stop_token::StopToken;
 use coordinator::{abort_if_not_in_docker, print_version};
@@ -31,7 +32,7 @@ async fn main() -> Result<(), Error> {
     tracing_subscriber::registry()
         .with(fmt::layer())
         .with(FilterFn::new(|msg| msg.target().starts_with("coordinator")))
-        .with(LevelFilter::DEBUG)
+        .with(get_log_level())
         .init();
     print_version();
 
@@ -91,6 +92,18 @@ async fn setup_stop_mechanism(stop_token: StopToken) {
     }
 
     stop_token.trigger_stop();
+}
+
+fn get_log_level() -> LevelFilter {
+    let level = var("LOG_LEVEL").unwrap_or_default();
+    match level.to_lowercase().as_str() {
+        "error" => LevelFilter::ERROR,
+        "warn" => LevelFilter::WARN,
+        "debug" => LevelFilter::DEBUG,
+        "trace" => LevelFilter::TRACE,
+        "off" => LevelFilter::OFF,
+        _ => LevelFilter::INFO,
+    }
 }
 
 #[derive(Debug, Error)]
