@@ -10,6 +10,7 @@ use thiserror::Error;
 use tracing::{error, Level};
 use tracing_subscriber::FmtSubscriber;
 use ureq::ErrorKind;
+use coordinator::print_version;
 
 #[derive(Parser)]
 struct Arguments {
@@ -30,6 +31,8 @@ enum Action {
     Status,
     /// Setup archie's config
     Init,
+    /// Print version info
+    Version,
 }
 
 fn main() -> Result<ExitCode, Error> {
@@ -54,6 +57,10 @@ fn main() -> Result<ExitCode, Error> {
         Action::Remove(remove) => actions::remove(&config, remove),
         Action::Status => actions::status(&config),
         Action::Init => config::init(&mut config, &args.profile).map_err(Error::from),
+        Action::Version => {
+            print_version();
+            Ok(0)
+        },
     };
 
     let exit_code = try_to_interpret_error(result)?;

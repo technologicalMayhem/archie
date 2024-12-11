@@ -10,7 +10,7 @@ mod web_server;
 
 use crate::messages::Message;
 use crate::stop_token::StopToken;
-use coordinator::abort_if_not_in_docker;
+use coordinator::{abort_if_not_in_docker, print_version};
 use itertools::Itertools;
 use signal_hook::consts::{SIGINT, SIGTERM};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -33,6 +33,7 @@ async fn main() -> Result<(), Error> {
         .with(FilterFn::new(|msg| msg.target().starts_with("coordinator")))
         .with(LevelFilter::DEBUG)
         .init();
+    print_version();
 
     let mut set = JoinSet::new();
     let mut stop_token = StopToken::new();

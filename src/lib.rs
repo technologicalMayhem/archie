@@ -1,8 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
+use tracing::info;
 
 pub mod endpoints;
+
+const VERSION: &str = env!("APP_VERSION");
 
 pub fn abort_if_not_in_docker() {
     if !std::fs::exists("/.dockerenv").unwrap_or(false) {
@@ -54,4 +57,8 @@ where
         .ok()
         .and_then(|val| val.parse::<T>().ok())
         .unwrap_or(or)
+}
+
+pub fn print_version() {
+    info!("Version built from {VERSION}");
 }

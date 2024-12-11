@@ -1,5 +1,5 @@
 use coordinator::endpoints::Endpoints;
-use coordinator::{abort_if_not_in_docker, Artifacts};
+use coordinator::{abort_if_not_in_docker, print_version, Artifacts};
 use reqwest::header::{HeaderMap, HeaderValue};
 use std::collections::HashMap;
 use std::fs::{create_dir_all, exists, read_to_string, remove_dir_all};
@@ -14,6 +14,7 @@ async fn main() -> Result<(), AppError> {
     tracing_subscriber::fmt()
         .with_max_level(Level::DEBUG)
         .init();
+    print_version();
 
     let mut headers = HeaderMap::new();
     let hostname = read_to_string("/etc/hostname")?.replace('\n', "");
