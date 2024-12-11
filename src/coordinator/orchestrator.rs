@@ -14,7 +14,7 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::time::sleep;
-use tracing::info;
+use tracing::{debug, info};
 use tracing::log::{error, warn};
 
 pub async fn start(sender: Sender<Message>, receiver: Receiver<Message>, stop_token: StopToken) {
@@ -113,7 +113,7 @@ async fn start_build_container(
     };
 
     let response = docker.create_container(Some(options), config).await?;
-    info!("Created container {} for {package}", response.id);
+    debug!("Created container {} for {package}", response.id);
     if !response.warnings.is_empty() {
         warn!("Encountered warnings:");
     }
@@ -189,7 +189,7 @@ async fn remove_container(docker: &Docker, id: &str) {
     if let Err(err) = docker.remove_container(id, None).await {
         warn!("Failed to remove container {id}: {err}");
     } else {
-        info!("Cleaned up {id}");
+        debug!("Cleaned up {id}");
     }
 }
 

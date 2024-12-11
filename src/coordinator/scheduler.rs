@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 use tokio::select;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{Receiver, Sender};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 const TIMEOUT: i64 = 4 * 60 * 60; // 4 Hours
 const RETRY_TIME: i64 = 5 * 60; // 5 minutes
@@ -132,7 +132,7 @@ async fn check_for_package_updates(
     sender: &Sender<Message>,
     stop_token: &mut StopToken,
 ) -> Result<(), Error> {
-    info!("Checking for package updates");
+    debug!("Checking for package updates");
     let now = OffsetDateTime::now_utc().unix_timestamp();
     let mut packages_to_check = Vec::new();
     let mut never_built = Vec::new();

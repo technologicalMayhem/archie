@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{debug, error};
 
 const URL: &str = "https://aur.archlinux.org/rpc/v5/info?";
 const ARG: &str = "arg[]=";
@@ -40,7 +40,7 @@ pub async fn update_non_aur_packages(mut stop_token: StopToken) {
                     .map(String::from)
                     .collect();
                 *PACKAGE_CACHE.write().await = cache;
-                info!("Updated package cache");
+                debug!("Updated package cache");
             }
             Err(err) => {
                 error!("Failed to update cache: {err}");

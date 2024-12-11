@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::Sender;
 use tower_http::services::ServeDir;
-use tracing::error;
+use tracing::{debug, error};
 use tracing::log::info;
 
 #[derive(Clone)]
@@ -114,7 +114,7 @@ async fn receive_artifacts(
         files.push(file_name);
     }
 
-    info!(
+    debug!(
         "Got artifacts for {}. Received {} files.",
         data.package_name,
         data.files.len()
