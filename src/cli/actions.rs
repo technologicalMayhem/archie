@@ -1,6 +1,7 @@
 use crate::config::Config;
-use crate::util::{combine_for_display, wrap_text};
+use crate::util::wrap_text;
 use crate::Error;
+use coordinator::combine_for_display;
 use clap::Args;
 use colored::Colorize;
 use coordinator::endpoints::Endpoints;

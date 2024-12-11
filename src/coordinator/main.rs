@@ -11,8 +11,7 @@ mod web_server;
 use std::env::var;
 use crate::messages::Message;
 use crate::stop_token::StopToken;
-use coordinator::{abort_if_not_in_docker, print_version};
-use itertools::Itertools;
+use coordinator::{abort_if_not_in_docker, combine_for_display, print_version};
 use signal_hook::consts::{SIGINT, SIGTERM};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -41,11 +40,11 @@ async fn main() -> Result<(), Error> {
     let (send, receive) = channel::<Message>(128);
 
     info!("Starting application");
-    let pkg = state::tracked_packages().await.iter().join("\n");
+    let pkg = state::tracked_packages().await;
     if pkg.is_empty() {
         info!("No packages being managed right now");
     } else {
-        info!("Packages:\n{pkg}");
+        info!("Managing {}", combine_for_display(pkg));
     }
 
     set.spawn(aur::update_non_aur_packages(stop_token.child()));
