@@ -7,4 +7,5 @@ fn main() {
     };
     let describe = String::from_utf8_lossy(&describe_out.stdout);
     println!("cargo::rustc-env=APP_VERSION={describe}");
+    println!("cargo::rerun-if-changed=.git");
 }
