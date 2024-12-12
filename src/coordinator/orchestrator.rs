@@ -103,7 +103,10 @@ async fn start_build_container(
     image: &str,
     package: &Package,
 ) -> Result<String, Error> {
-    let options: CreateContainerOptions<String> = CreateContainerOptions::default();
+    let options = CreateContainerOptions {
+        name: package.to_string(),
+        ..Default::default()
+    };
     let env_var = format!("PACKAGE={package}");
     let config = Config {
         image: Some(image),
