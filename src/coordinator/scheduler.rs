@@ -1,7 +1,7 @@
 use crate::aur::get_last_modified;
 use crate::messages::{Message, Package};
 use crate::scheduler::Error::CouldNotReachAUR;
-use crate::state::{get_build_times, get_last_check, set_last_check, tracked_packages};
+use crate::state::{get_build_times, tracked_packages};
 use crate::stop_token::StopToken;
 use crate::{aur, config, state};
 use itertools::Itertools;
@@ -132,20 +132,10 @@ async fn check_for_package_updates(
     stop_token: &mut StopToken,
 ) -> Result<(), Error> {
     debug!("Checking for package updates");
-    let now = OffsetDateTime::now_utc().unix_timestamp();
-    let mut packages_to_check = Vec::new();
-    let mut never_built = Vec::new();
-    for package in tracked_packages().await {
-        if let Some(last_check) = get_last_check(&package).await {
-            if last_check + TIMEOUT <= now {
-                packages_to_check.push(package);
-            }
-        } else {
-            never_built.push(package);
-        }
-    }
+    let tracked_packages = tracked_packages().await;
+    let mut never_built = tracked_packages.clone();
 
-    let last_modified = match get_last_modified(&packages_to_check).await {
+    let last_modified = match get_last_modified(&tracked_packages).await {
         Ok(last_modified) => last_modified,
         Err(err) => {
             error!("Failed to lookup package info in the AUR: {err}");
@@ -154,15 +144,14 @@ async fn check_for_package_updates(
         }
     };
 
-    for (package, build_time) in get_build_times(&packages_to_check).await {
-        if let Some(last_modified) = last_modified.get(package) {
+    for (package, build_time) in get_build_times(&tracked_packages).await {
+        if let Some(last_modified) = last_modified.get(&package) {
             if *last_modified > build_time {
                 info!("{package} needs to be rebuilt");
                 send_message(sender, Message::BuildPackage(package.to_string()));
-            } else {
-                set_last_check(package, now).await;
             }
         }
+        never_built.remove(&package);
     }
 
     for package in never_built {

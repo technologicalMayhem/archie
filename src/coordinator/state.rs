@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{exists, read_to_string};
 use std::sync::{Arc, LazyLock};
 use thiserror::Error;
-use time::OffsetDateTime;
 use tokio::fs::write;
 use tokio::sync::RwLock;
 use tracing::error;
@@ -20,7 +19,6 @@ static STATE: LazyLock<State> = LazyLock::new(|| match load_state() {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PackageInfo {
-    pub last_check: i64,
     pub is_dependency: bool,
     pub dependencies: HashSet<Package>,
     pub build: Option<Build>,
@@ -87,7 +85,6 @@ pub async fn track_package(package: &Package, dependencies: HashSet<Package>, is
             build: None,
             is_dependency,
             dependencies,
-            last_check: OffsetDateTime::now_utc().unix_timestamp(),
         },
     );
     drop(state);
@@ -143,39 +140,20 @@ pub async fn unneeded_dependencies() -> HashSet<Package> {
         .collect()
 }
 
-pub async fn get_last_check(package_name: &str) -> Option<i64> {
+pub async fn get_build_times(packages: &HashSet<Package>) -> HashMap<Package, i64> {
     STATE
         .persistent
         .read()
         .await
         .package_status
-        .get(package_name)
-        .map(|pkg| pkg.last_check)
-}
-
-pub async fn set_last_check(package_name: &str, last_check: i64) {
-    if let Some(status) = STATE
-        .persistent
-        .write()
-        .await
-        .package_status
-        .get_mut(package_name)
-    {
-        status.last_check = last_check;
-    }
-
-    save_state().await;
-}
-
-pub async fn get_build_times(packages: &[String]) -> Vec<(&str, i64)> {
-    let states = &STATE.persistent.read().await.package_status;
-    packages
         .iter()
-        .filter_map(|pkg| {
-            states
-                .get(pkg)
-                .and_then(|info| info.build.as_ref())
-                .map(|status| (pkg.as_str(), status.time))
+        .filter_map(|(pkg, info)| {
+            if packages.contains(pkg) {
+                if let Some(a) = info.build.as_ref().map(|x| x.time) {
+                    return Some((pkg.to_string(), a))
+                }
+            }
+            None
         })
         .collect()
 }
