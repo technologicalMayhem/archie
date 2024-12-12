@@ -22,3 +22,5 @@ Things I want to implement down the line:
     - If a package gets removed it should ask whether to invoke 'pacman -Rs \<package\>'
     - When package gets added, there should be the option to invoke 'pacman -Sy \<package\>' when it finished being
       built
+- Hard fail for packages. After a certain amount of attempts a package will 'hard fail' and never be rebuilt unless a user specifically requests it or there is an update for the package
+- Add the ability for the user to force a rebuilt of a package via the cli
