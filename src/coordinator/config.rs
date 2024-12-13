@@ -8,6 +8,7 @@ static CONFIG: LazyLock<Config> = LazyLock::new(load);
 struct Config {
     max_builders: usize,
     max_retries: u8,
+    update_check_interval: u32,
     port: u32,
     image: String,
     repo_name: String,
@@ -18,6 +19,7 @@ impl Default for Config {
         Self {
             max_builders: 1,
             max_retries: 3,
+            update_check_interval: 240,
             port: 3200,
             image: "aur_worker".to_string(),
             repo_name: "aur".to_string(),
@@ -37,6 +39,7 @@ fn load_from_env() -> Config {
     Config {
         max_builders: env_or("MAX_BUILDERS", default.max_builders),
         max_retries: env_or("MAX_RETRIES", default.max_retries),
+        update_check_interval: env_or("UPDATE_CHECK_INTERVAL", default.update_check_interval),
         port: env_or("PORT", default.port),
         image: env_or("BUILDER_IMAGE", default.image),
         repo_name: env_or("REPO_NAME", default.repo_name),
@@ -49,6 +52,10 @@ pub fn max_builders() -> usize {
 
 pub fn max_retries() -> u8 {
     CONFIG.max_retries
+}
+
+pub fn update_check_interval() -> u32 {
+    CONFIG.update_check_interval
 }
 
 pub fn port() -> u32 {

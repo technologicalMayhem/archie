@@ -13,7 +13,6 @@ use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tracing::{debug, error, info, warn};
 
-const TIMEOUT: i64 = 4 * 60 * 60; // 4 Hours
 const RETRY_TIME: i64 = 5 * 60; // 5 minutes
 
 pub async fn start(sender: Sender<Message>, receiver: Receiver<Message>, token: StopToken) {
@@ -26,13 +25,14 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
     let mut next_update_check = 0;
     let mut next_retry_check = 0;
     let mut retries: HashMap<Package, u8> = HashMap::new();
+    let update_check_interval = i64::from(config::update_check_interval());
 
     loop {
         let now = OffsetDateTime::now_utc().unix_timestamp();
 
         if next_update_check < now {
             if check_for_package_updates(&sender, stop_token).await.is_ok() {
-                next_update_check = now + TIMEOUT;
+                next_update_check = now + update_check_interval;
                 retries.clear();
             } else {
                 next_update_check = now + RETRY_TIME;
