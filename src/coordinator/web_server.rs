@@ -7,15 +7,16 @@ use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use coordinator::{
-    AddPackages, AddPackagesResponse, Artifacts, RemovePackages, RemovePackagesResponse, Status,
+    AddPackages, AddPackagesResponse, Artifacts, ForceRebuild, ForceRebuildResponse,
+    RemovePackages, RemovePackagesResponse, Status,
 };
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::Sender;
 use tower_http::services::ServeDir;
-use tracing::{debug, error};
 use tracing::log::info;
+use tracing::{debug, error};
 
 #[derive(Clone)]
 struct RequestState {
@@ -39,6 +40,7 @@ pub async fn start(sender: Sender<Message>, mut stop_token: StopToken) {
         .route("/status", get(status))
         .route("/packages/add", post(add_package))
         .route("/packages/remove", post(remove_package))
+        .route("/packages/rebuild", post(force_rebuild))
         .route(
             "/artifacts",
             post(receive_artifacts).layer(DefaultBodyLimit::disable()),
@@ -151,6 +153,27 @@ async fn remove_package(
         removed: to_be_removed,
         not_tracked,
     }))
+}
+
+async fn force_rebuild(
+    state: State<RequestState>,
+    Json(rebuild): Json<ForceRebuild>,
+) -> Result<Json<ForceRebuildResponse>, StatusCode> {
+    let tracked_packages = state::tracked_packages().await;
+    let not_found: HashSet<String> = rebuild
+        .packages
+        .difference(&tracked_packages)
+        .map(String::to_owned)
+        .collect();
+
+    if not_found.is_empty() {
+        for package in rebuild.packages {
+            info!("User requested rebuild for {package}");
+            state.send_message(Message::BuildPackage(package))?;
+        }
+    }
+
+    Ok(Json(ForceRebuildResponse { not_found }))
 }
 
 async fn status() -> Json<Status> {

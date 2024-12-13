@@ -1,10 +1,10 @@
 use crate::config::Config;
 use crate::util::wrap_text;
 use crate::Error;
-use coordinator::combine_for_display;
 use clap::Args;
 use colored::Colorize;
 use coordinator::endpoints::Endpoints;
+use coordinator::{combine_for_display, ForceRebuild, ForceRebuildResponse};
 use coordinator::{
     AddPackages, AddPackagesResponse, RemovePackages, RemovePackagesResponse, Status,
 };
@@ -106,6 +106,54 @@ pub fn remove(config: &Config, remove: Remove) -> Result<u8, Error> {
     } else {
         info!("Removed {}", combine_for_display(&response.removed));
         Ok(0)
+    }
+}
+
+#[derive(Clone, Args)]
+pub struct Rebuild {
+    /// The packages to remove
+    packages: Vec<String>,
+}
+
+pub fn rebuild(config: &Config, rebuild: Rebuild) -> Result<u8, Error> {
+    let client = Agent::new();
+    let endpoints: Endpoints = config.server.to_endpoints();
+
+    if rebuild.packages.is_empty() {
+        error!("No packages to remove were given.");
+        return Ok(1);
+    }
+
+    let remove = ForceRebuild {
+        packages: rebuild.packages.clone().into_iter().collect(),
+    };
+
+    let response: ForceRebuildResponse = client
+        .post(&endpoints.rebuilt_packages())
+        .send_json(remove)
+        .map_err(Box::new)?
+        .into_json()?;
+
+    if !response.not_found.is_empty() {
+        let are_is = if response.not_found.len() > 1 {
+            "are"
+        } else {
+            "is"
+        };
+        warn!(
+            "{} {are_is} not tracked",
+            combine_for_display(&response.not_found)
+        );
+    }
+    if response.not_found.is_empty() {
+        info!(
+            "Started rebuild for {}",
+            combine_for_display(&rebuild.packages)
+        );
+        Ok(0)
+    } else {
+        error!("No builds have been started");
+        Ok(1)
     }
 }
 

@@ -51,6 +51,16 @@ pub struct RemovePackagesResponse {
     pub not_tracked: HashSet<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ForceRebuild {
+    pub packages: HashSet<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ForceRebuildResponse {
+    pub not_found: HashSet<String>,
+}
+
 pub fn env_or<T>(var: &str, or: T) -> T
 where
     T: FromStr,

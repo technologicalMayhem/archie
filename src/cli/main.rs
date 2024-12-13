@@ -27,6 +27,8 @@ enum Action {
     Add(actions::Add),
     /// Remove packages from the coordinator
     Remove(actions::Remove),
+    /// Force the coordinator to rebuild the package
+    Rebuild(actions::Rebuild),
     /// Display the status of coordinator
     Status,
     /// Setup archie's config
@@ -55,6 +57,7 @@ fn main() -> Result<ExitCode, Error> {
     let result = match args.action {
         Action::Add(add) => actions::add(&config, add),
         Action::Remove(remove) => actions::remove(&config, remove),
+        Action::Rebuild(rebuild) => actions::rebuild(&config, rebuild),
         Action::Status => actions::status(&config),
         Action::Init => config::init(&mut config, &args.profile).map_err(Error::from),
         Action::Version => {
