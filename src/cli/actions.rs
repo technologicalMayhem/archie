@@ -115,7 +115,7 @@ pub struct Rebuild {
     packages: Vec<String>,
 }
 
-pub fn rebuild(config: &Config, rebuild: Rebuild) -> Result<u8, Error> {
+pub fn rebuild(config: &Config, rebuild: &Rebuild) -> Result<u8, Error> {
     let client = Agent::new();
     let endpoints: Endpoints = config.server.to_endpoints();
 

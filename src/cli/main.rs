@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 mod actions;
 mod config;
 mod log_formatter;
@@ -57,7 +58,7 @@ fn main() -> Result<ExitCode, Error> {
     let result = match args.action {
         Action::Add(add) => actions::add(&config, add),
         Action::Remove(remove) => actions::remove(&config, remove),
-        Action::Rebuild(rebuild) => actions::rebuild(&config, rebuild),
+        Action::Rebuild(rebuild) => actions::rebuild(&config, &rebuild),
         Action::Status => actions::status(&config),
         Action::Init => config::init(&mut config, &args.profile).map_err(Error::from),
         Action::Version => {

@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 mod aur;
 mod config;
 mod messages;

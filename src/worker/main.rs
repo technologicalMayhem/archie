@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 use coordinator::endpoints::Endpoints;
 use coordinator::{abort_if_not_in_docker, print_version, Artifacts};
 use reqwest::header::{HeaderMap, HeaderValue};

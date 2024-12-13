@@ -1,3 +1,4 @@
+#![warn(clippy::pedantic)]
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
