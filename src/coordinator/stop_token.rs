@@ -29,7 +29,7 @@ impl StopToken {
         }
     }
 
-    pub fn trigger_stop(self) {
+    pub fn trigger_stop(&self) {
         self.is_stopped.store(true, Relaxed);
         for child in &self.children {
             child.store(true, Relaxed);
