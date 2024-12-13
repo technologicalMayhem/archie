@@ -70,6 +70,8 @@ services:
       - "3200:3200"
 ```
 
+For additional configuration options, [see here](CONFIGURATION.md).
+
 Finally run `sudo docker compose up -d` to bring up the coordinator. Using `sudo docker compose logs` you can check if
 it managed to start without any errors.
 
