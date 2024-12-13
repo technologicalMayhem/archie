@@ -58,9 +58,9 @@ Then set up a `docker-compose.yml` file, ideally in a new directory, with the fo
 services:
   coordinator:
     image: git.techmayhem.net/techmayhem/aur_coordinator:alpha-2
+    restart: unless-stopped
     environment:
       BUILDER_IMAGE: "git.techmayhem.net/techmayhem/aur_worker:alpha-2"
-      PORT: 3200
     volumes:
       - ./container/output:/output
       - ./container/config:/config
