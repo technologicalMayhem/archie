@@ -5,7 +5,7 @@ use crate::{config, state};
 use std::path::PathBuf;
 use std::process::Command;
 use thiserror::Error;
-use tokio::fs::{remove_file, try_exists};
+use tokio::fs::{read_dir, remove_file};
 use tokio::select;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tracing::{debug, error};
@@ -28,7 +28,7 @@ async fn run_repository(
 ) -> Result<(), Error> {
     let repo_name = config::repo_name();
 
-    recreate_repo(&repo_name).await;
+    recreate_repo(&repo_name).await?;
 
     loop {
         let artifact = select! {
@@ -78,27 +78,39 @@ async fn run_repository(
     Ok(())
 }
 
-async fn recreate_repo(repo_name: &str) {
+async fn recreate_repo(repo_name: &str) -> Result<(), Error> {
     debug!("Recreating repository");
 
-    let repo_files = vec![
-        format!("{REPO_DIR}{repo_name}.db"),
-        format!("{REPO_DIR}{repo_name}.db.tar.zst"),
-        format!("{REPO_DIR}{repo_name}.files"),
-        format!("{REPO_DIR}{repo_name}.files.tar.zst"),
+    let repo_files = [
+        ".db",
+        ".db.tar.zst",
+        ".files",
+        ".files.tar.zst",
     ];
 
-    for file in repo_files {
-        if try_exists(&file).await.ok().unwrap_or(false) {
-            if let Err(err) = remove_file(&file).await {
-                error!("Failed to delete file {file}: {err}");
-            }
+    let mut files = match read_dir(REPO_DIR).await {
+        Ok(files) => files,
+        Err(err) => {
+            error!("Failed to read files in repository directory");
+            return Err(err)?;
+        }
+    };
+
+    while let Ok(Some(file)) = files.next_entry().await {
+        let file_name_os = file.file_name();
+        let file_name = file_name_os.to_string_lossy();
+        if repo_files.iter().any(|extension| file_name.ends_with(extension)) {
+            remove_file(file.path()).await?;
         }
     }
 
     let files = state::get_all_files().await;
 
-    add_to_repo(repo_name, &files);
+    if add_to_repo(repo_name, &files) {
+        Ok(())
+    } else {
+        Err(Error::CreateRepoFailed)
+    }
 }
 
 fn add_to_repo(repo_name: &str, files: &Vec<String>) -> bool {
@@ -166,4 +178,6 @@ fn run_command(mut command: Command) -> bool {
 enum Error {
     #[error("Encountered an IO error")]
     IO(#[from] std::io::Error),
+    #[error("Failed to create repository")]
+    CreateRepoFailed,
 }
