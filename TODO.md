@@ -3,7 +3,6 @@
 - If no packages have been built, there is no database file in the repository. Trying to let pacman update its databases
   in this state causes it to error out.
 - If the user changes the name of the repository, the old one will stick around.
-- Update check interval to config file
 - If an AUR package updates whilst it being built by a worker, after the worker finished the build time will be greater
   that the update time
 - Let archie force a build for a package
