@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Config option for update check interval
+- Users can request rebuilds manually
+
+### Fixed
+
+- Old database file not being deleted if the name of the repository is changed
+- Coordinator not shutting down if any part of it shuts down unexpectedly
+
 ## [0.2.0] - 2024-12-12
 
 ### Added
