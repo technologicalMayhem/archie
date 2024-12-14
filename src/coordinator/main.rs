@@ -127,15 +127,16 @@ fn register_signals() -> Result<Arc<AtomicBool>, Error> {
 }
 
 async fn setup_stop_mechanism(stop_token: StopToken) {
-    let Ok(stop_triggered) = register_signals() else {
-        stop_token.trigger_stop();
-        return;
-    };
-
-    while !stop_triggered.load(Ordering::Relaxed) {
-        sleep(Duration::from_millis(10)).await;
+    match register_signals() {
+        Ok(stop_triggered) => {
+            while !stop_triggered.load(Ordering::Relaxed) {
+                sleep(Duration::from_millis(10)).await;
+            }
+        }
+        Err(err) => {
+            error!("Failed to register signal hooks: {err}")
+        }
     }
-
     stop_token.trigger_stop();
 }
 
