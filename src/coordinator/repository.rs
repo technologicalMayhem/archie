@@ -120,7 +120,6 @@ fn add_to_repo(repo_name: &str, files: &Vec<String>) -> bool {
         "--new",
         "--remove",
         "--prevent-downgrade",
-        "--verify",
         &format!("{repo_name}.db.tar.zst"),
     ]);
     command.args(files);

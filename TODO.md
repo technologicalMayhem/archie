@@ -1,9 +1,3 @@
-# Issues
-
-- If no packages have been built, there is no database file in the repository. Trying to let pacman update its databases
-  in this state causes it to error out.
-- If the user changes the name of the repository, the old one will stick around.
-
 # Documentation
 
 I need to write code documentation so it's more clear what each part actually does.

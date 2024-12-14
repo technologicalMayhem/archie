@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Database was not created if no packages were being tracked
 - Old database file not being deleted if the name of the repository is changed
 - Coordinator not shutting down if any part of it shuts down unexpectedly
 
