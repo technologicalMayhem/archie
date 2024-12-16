@@ -56,22 +56,13 @@ async fn build_pkg(package_name: String) -> Result<Artifacts, AppError> {
 
     let build_time = OffsetDateTime::now_utc().unix_timestamp();
 
-    run_command("paru", &["-Sy"]).await?;
-    run_command("paru", &["-G", &package_name]).await?;
-    run_command(
-        "paru",
-        &[
-            "-B",
-            "--nouseask",
-            "--skipreview",
-            "--noupgrademenu",
-            "--failfast",
-            &package_name,
-        ],
-    )
-    .await?;
+    let package_url = format!("https://aur.archlinux.org/{package_name}.git");
 
-    let mut dir = tokio::fs::read_dir(format!("/home/worker/build/{package_name}")).await?;
+    run_command("sudo", &["pacman", "-Sy", "--needed", "--noconfirm", "git"]).await?;
+    run_command("git", &["clone", &package_url, "."]).await?;
+    run_command("makepkg", &["-s", "--needed", "--noconfirm"]).await?;
+
+    let mut dir = tokio::fs::read_dir("/home/worker/build/").await?;
     let mut files = HashMap::new();
     while let Some(entry) = dir.next_entry().await? {
         if entry.file_type().await?.is_file()
