@@ -11,6 +11,7 @@ that corresponds to the `environment` section. The following options are availab
 |                  ``PORT`` |     3200      | The port the web server should bind to.                                                                                                                                                                                            |
 |         ``BUILDER_IMAGE`` |  aur_worker   | The docker tag of the image for the builder unit.                                                                                                                                                                                  |
 |             ``REPO_NAME`` |      aur      | The name for the repository that the packages will be placed in.                                                                                                                                                                   |
+|          ``MEMORY_LIMIT`` |               | If set, limits the maximum amount of RAM a worker is allowed to use in bytes. Max usage of all workers should be MAX_BUILDER * MEMORY_LIMT.                                                                                        |
 
 # Archie
 

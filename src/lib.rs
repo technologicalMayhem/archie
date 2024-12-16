@@ -72,6 +72,15 @@ where
         .unwrap_or(or)
 }
 
+pub fn env_or_none<T>(var: &str) -> Option<T>
+where
+    T: FromStr,
+{
+    std::env::var(var)
+        .ok()
+        .and_then(|val| val.parse::<T>().ok())
+}
+
 pub fn print_version() {
     info!("Version built from {VERSION}");
 }

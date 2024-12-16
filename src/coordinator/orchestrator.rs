@@ -4,7 +4,7 @@ use crate::stop_token::StopToken;
 use bollard::container::{
     Config, CreateContainerOptions, LogOutput, LogsOptions, StopContainerOptions,
 };
-use bollard::models::ContainerStateStatusEnum;
+use bollard::models::{ContainerStateStatusEnum, HostConfig};
 use bollard::Docker;
 use futures::future::join_all;
 use futures::StreamExt;
@@ -111,6 +111,10 @@ async fn start_build_container(
     let config = Config {
         image: Some(image),
         env: Some(vec![&env_var]),
+        host_config: Some(HostConfig {
+            memory: config::max_memory(),
+            ..Default::default()
+        }),
         ..Default::default()
     };
 

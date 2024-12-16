@@ -1,4 +1,4 @@
-use coordinator::env_or;
+use coordinator::{env_or, env_or_none};
 use std::sync::LazyLock;
 use tracing::info;
 
@@ -12,6 +12,7 @@ struct Config {
     port: u32,
     image: String,
     repo_name: String,
+    memory_limit: Option<i64>,
 }
 
 impl Default for Config {
@@ -23,6 +24,7 @@ impl Default for Config {
             port: 3200,
             image: "aur_worker".to_string(),
             repo_name: "aur".to_string(),
+            memory_limit: None,
         }
     }
 }
@@ -43,6 +45,7 @@ fn load_from_env() -> Config {
         port: env_or("PORT", default.port),
         image: env_or("BUILDER_IMAGE", default.image),
         repo_name: env_or("REPO_NAME", default.repo_name),
+        memory_limit: env_or_none("MEMORY_LIMIT"),
     }
 }
 
@@ -69,3 +72,5 @@ pub fn image() -> String {
 pub fn repo_name() -> String {
     CONFIG.repo_name.clone()
 }
+
+pub fn max_memory() -> Option<i64> { CONFIG.memory_limit }
