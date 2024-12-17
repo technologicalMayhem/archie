@@ -17,6 +17,11 @@ impl Endpoints {
     }
 
     #[must_use]
+    pub fn add_package_url(&self) -> String {
+        self.url("packages/add-url")
+    }
+
+    #[must_use]
     pub fn remove_packages(&self) -> String {
         self.url("packages/remove")
     }

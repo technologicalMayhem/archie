@@ -26,6 +26,7 @@ RUN cargo build --release
 
 FROM archlinux:multilib-devel AS coordinator
 RUN mkdir "/output" "/config"
+RUN pacman -Sy --noconfirm --needed git
 WORKDIR /home/coordinator/bin/
 COPY --from=builder /app/target/release/coordinator .
 CMD ["./coordinator"]

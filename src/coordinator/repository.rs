@@ -66,11 +66,7 @@ async fn run_repository(
                 }
                 remove_from_repo(&repo_name, &files, &packages_to_remove);
             }
-            Message::AddPackages(_)
-            | Message::AddDependencies(_)
-            | Message::BuildPackage(_)
-            | Message::BuildSuccess(_)
-            | Message::BuildFailure { .. } => (),
+            _ => {},
         }
     }
 

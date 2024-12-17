@@ -1,12 +1,13 @@
-use crate::aur::get_last_modified;
 use crate::messages::{Message, Package};
+use crate::query_package::{get_last_modified, PackageData};
 use crate::scheduler::Error::CouldNotReachAUR;
-use crate::state::{get_build_times, tracked_packages};
+use crate::state::{get_build_times, tracked_packages_aur, tracked_packages_url};
 use crate::stop_token::StopToken;
-use crate::{aur, config, state};
+use crate::{config, query_package, state};
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
+use thiserror::Error;
 use time::OffsetDateTime;
 use tokio::select;
 use tokio::sync::broadcast::error::RecvError;
@@ -31,7 +32,7 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
         let now = OffsetDateTime::now_utc().unix_timestamp();
 
         if next_update_check < now {
-            if check_for_package_updates(&sender, stop_token).await.is_ok() {
+            if check_for_package_updates(&sender).await {
                 next_update_check = now + update_check_interval;
                 retries.clear();
             } else {
@@ -62,6 +63,7 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
                 Message::AddPackages(packages) => {
                     add_package(&sender, packages, false).await;
                 }
+                Message::AddPackageUrl { url, data } => add_package_url(&sender, url, data).await,
                 Message::AddDependencies(packages) => {
                     add_package(&sender, packages, true).await;
                 }
@@ -83,7 +85,7 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
                         retries.insert(package.clone(), 1);
                     };
                 }
-                Message::BuildPackage(_) | Message::ArtifactsUploaded { .. } => (),
+                _ => (),
             },
             Some(Err(RecvError::Closed)) => {
                 error!("Message channel closed");
@@ -98,7 +100,7 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
 }
 
 async fn add_package(sender: &Sender<Message>, packages: HashSet<Package>, dependencies: bool) {
-    let aur_dependencies = match aur::get_dependencies(&packages).await {
+    let aur_dependencies = match query_package::get_dependencies(&packages).await {
         Ok(deps) => deps,
         Err(err) => {
             error!(
@@ -115,7 +117,7 @@ async fn add_package(sender: &Sender<Message>, packages: HashSet<Package>, depen
                 warn!("Failed to get dependencies for {package}. This might mean it is a meta package");
                 continue;
             };
-            state::track_package(&package, package_dependencies, dependencies).await;
+            state::track_package(package.clone(), package_dependencies, dependencies).await;
             info!("Added new package {package}");
             send_message(sender, Message::BuildPackage(package));
         }
@@ -127,19 +129,42 @@ async fn add_package(sender: &Sender<Message>, packages: HashSet<Package>, depen
     }
 }
 
-async fn check_for_package_updates(
-    sender: &Sender<Message>,
-    stop_token: &mut StopToken,
-) -> Result<(), Error> {
+async fn add_package_url(sender: &Sender<Message>, url: String, data: PackageData) {
+    send_message(sender, Message::AddDependencies(data.depends.clone()));
+    state::track_package_url(data.name.clone(), url.clone(), data.depends).await;
+    send_message(sender, Message::BuildPackage(data.name));
+}
+
+async fn check_for_package_updates(sender: &Sender<Message>) -> bool {
     debug!("Checking for package updates");
-    let tracked_packages = tracked_packages().await;
+
+    let mut success = true;
+
+    if let Err(err) = check_aur_packages(sender).await {
+        error!("Failed to check aur packages for updates: {err}");
+        success = false;
+    }
+
+    if let Err(err) = check_url_packages(sender).await {
+        error!("Failed to check url packages for updates");
+        for (package, error) in err {
+            error!("Error whilst checking {package}: {error}");
+        }
+        success = false;
+    }
+
+    success
+}
+
+async fn check_aur_packages(sender: &Sender<Message>) -> Result<(), Error> {
+    debug!("Checking aur packages for updates");
+    let tracked_packages = tracked_packages_aur().await;
     let mut never_built = tracked_packages.clone();
 
     let last_modified = match get_last_modified(&tracked_packages).await {
         Ok(last_modified) => last_modified,
         Err(err) => {
             error!("Failed to lookup package info in the AUR: {err}");
-            stop_token.sleep(Duration::from_secs(5 * 60)).await;
             return Err(CouldNotReachAUR);
         }
     };
@@ -162,12 +187,55 @@ async fn check_for_package_updates(
     Ok(())
 }
 
+async fn check_url_packages(
+    sender: &Sender<Message>,
+) -> Result<(), Vec<(Package, query_package::Error)>> {
+    debug!("Checking url packages for updates");
+    let mut tracked_packages = tracked_packages_url().await;
+    let mut never_built = tracked_packages.clone();
+    let mut errors = Vec::new();
+
+    for (package, build_time) in get_build_times(&tracked_packages.keys().cloned().collect()).await
+    {
+        never_built.remove(&package);
+
+        let Some(url) = tracked_packages.remove(&package) else {
+            error!("Could not find package url for {package} in the tracked packages. This should never happen!");
+            continue;
+        };
+
+        match query_package::check_pkgbuild(&url).await {
+            Ok(data) => {
+                if build_time < data.last_modified {
+                    send_message(sender, Message::BuildPackage(package));
+                }
+            }
+            Err(err) => {
+                errors.push((package, err));
+            }
+        }
+    }
+
+    for (package, _) in never_built {
+        info!("{package} needs to be built");
+        send_message(sender, Message::BuildPackage(package));
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 fn send_message(sender: &Sender<Message>, message: Message) {
     if let Err(err) = sender.send(message) {
         error!("There was an error send a message: {err}");
     }
 }
 
+#[derive(Debug, Error)]
 enum Error {
+    #[error("Failed to reach AUR")]
     CouldNotReachAUR,
 }

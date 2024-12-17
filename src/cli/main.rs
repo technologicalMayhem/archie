@@ -26,6 +26,8 @@ struct Arguments {
 enum Action {
     /// Add new packages to the coordinator
     Add(actions::Add),
+    /// Add a package with a git url to the coordinator
+    AddUrl(actions::AddUrl),
     /// Remove packages from the coordinator
     Remove(actions::Remove),
     /// Force the coordinator to rebuild the package
@@ -57,6 +59,7 @@ fn main() -> Result<ExitCode, Error> {
 
     let result = match args.action {
         Action::Add(add) => actions::add(&config, add),
+        Action::AddUrl(add) => actions::add_url(&config, add),
         Action::Remove(remove) => actions::remove(&config, remove),
         Action::Rebuild(rebuild) => actions::rebuild(&config, &rebuild),
         Action::Status => actions::status(&config),

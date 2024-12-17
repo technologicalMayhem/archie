@@ -6,7 +6,9 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::sync::LazyLock;
 use std::time::Duration;
+use tempfile::tempdir;
 use thiserror::Error;
+use tokio::fs::try_exists;
 use tokio::sync::RwLock;
 use tracing::{debug, error};
 
@@ -24,11 +26,84 @@ struct AurRPC {
 #[derive(Deserialize)]
 struct PackageInfo {
     #[serde(rename = "Name")]
-    name: String,
+    pub name: String,
     #[serde(rename = "LastModified")]
-    last_modified: i64,
+    pub last_modified: i64,
     #[serde(rename = "Depends")]
-    depends: HashSet<Package>,
+    pub depends: HashSet<Package>,
+}
+
+#[derive(Clone)]
+pub struct PackageData {
+    pub name: Package,
+    pub last_modified: i64,
+    pub depends: HashSet<Package>,
+}
+
+// TODO: This is really ugly right now, but it will do
+pub async fn check_pkgbuild<U: AsRef<str>>(url: U) -> Result<PackageData, Error> {
+    let dir = tempdir()?;
+    let path = dir.path().to_str().ok_or(Error::TempDirPath)?;
+
+    debug!("Cloning git repository {}", url.as_ref());
+    tokio::process::Command::new("git")
+        .args(["clone", url.as_ref(), path])
+        .output()
+        .await?;
+
+    if !try_exists(dir.path().join("PKGBUILD")).await? {
+        return Err(Error::PkgbuildMissing);
+    }
+
+    debug!("Reading package build");
+    let output = tokio::process::Command::new("bash")
+        .current_dir(path)
+        .args([
+            "-c",
+            r#"
+            source PKGBUILD
+            echo $pkgname
+            echo "${depends[@]} ${makedepends[@]}"
+            "#,
+        ])
+        .output()
+        .await?;
+
+    let cache = PACKAGE_CACHE.read().await;
+    let output = String::from_utf8_lossy(&output.stdout);
+    let mut lines = output.lines();
+    let name = lines
+        .next()
+        .map(String::from)
+        .ok_or(Error::PkgbuildNameMissing)?;
+    let depends = lines
+        .next()
+        .map(|text| {
+            text.split(' ')
+                .filter_map(|pkg| {
+                    if cache.contains(pkg) || pkg.contains(['<', '>', '=']) {
+                        None
+                    } else {
+                        Some(pkg.to_string())
+                    }
+                })
+                .collect::<HashSet<Package>>()
+        })
+        .unwrap_or_default();
+
+    debug!("Fetching timestamp");
+    let output = tokio::process::Command::new("git")
+        .current_dir(path)
+        .args(["show", "-s", "--format=%ct", "HEAD"])
+        .output()
+        .await?;
+
+    let last_modified: i64 = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse()
+        .map_err(|_| Error::FailedToParseTimestamp)?;
+
+    Ok(PackageData { name, last_modified, depends })
 }
 
 pub async fn update_non_aur_packages(mut stop_token: StopToken) {
@@ -119,7 +194,7 @@ where
         .collect())
 }
 
-async fn get_package_info<P, S>(packages: P) -> Result<Vec<PackageInfo>, Error>
+pub async fn get_package_info<P, S>(packages: P) -> Result<Vec<PackageInfo>, Error>
 where
     P: IntoIterator<Item = S>,
     S: AsRef<str> + Display,
@@ -143,4 +218,12 @@ pub enum Error {
     Deserialize(#[from] serde_json::Error),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("Failed to get path to temp dir")]
+    TempDirPath,
+    #[error("Could not find a PKGBUILD file")]
+    PkgbuildMissing,
+    #[error("Could not find a name in the PKGBUILD file")]
+    PkgbuildNameMissing,
+    #[error("Could not parse unix timestamp")]
+    FailedToParseTimestamp,
 }

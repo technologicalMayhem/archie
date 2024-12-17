@@ -1,5 +1,5 @@
 #![warn(clippy::pedantic)]
-mod aur;
+mod query_package;
 mod config;
 mod messages;
 mod orchestrator;
@@ -50,7 +50,7 @@ async fn main() {
         info!("Managing {}", combine_for_display(pkg));
     }
 
-    let aur_update = set.spawn(aur::update_non_aur_packages(stop_token.child()));
+    let aur_update = set.spawn(query_package::update_non_aur_packages(stop_token.child()));
     let web_server = set.spawn(web_server::start(send.clone(), stop_token.child()));
     let orchestrator = set.spawn(orchestrator::start(
         send.clone(),

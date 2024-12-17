@@ -37,3 +37,4 @@ home = "0.5.9"
 toml = "0.8.19"
 ureq = { version = "2", features = ["json"] }
 colored = "2.1.0"
+tempfile = "3.14.0"

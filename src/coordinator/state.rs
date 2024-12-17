@@ -19,6 +19,7 @@ static STATE: LazyLock<State> = LazyLock::new(|| match load_state() {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PackageInfo {
+    pub url: Option<String>,
     pub is_dependency: bool,
     pub dependencies: HashSet<Package>,
     pub build: Option<Build>,
@@ -77,11 +78,25 @@ pub async fn build_package(package: &Package, build_time: i64, files: Vec<String
     save_state().await;
 }
 
-pub async fn track_package(package: &Package, dependencies: HashSet<Package>, is_dependency: bool) {
+pub async fn track_package(package: Package, dependencies: HashSet<Package>, is_dependency: bool) {
+    track_package_inner(package, None, dependencies, is_dependency).await;
+}
+
+pub async fn track_package_url(package: Package, url: String, dependencies: HashSet<Package>) {
+    track_package_inner(package, Some(url), dependencies, false).await;
+}
+
+async fn track_package_inner(
+    package: Package,
+    url: Option<String>,
+    dependencies: HashSet<Package>,
+    is_dependency: bool,
+) {
     let mut state = STATE.persistent.write().await;
     state.package_status.insert(
-        package.to_string(),
+        package,
         PackageInfo {
+            url,
             build: None,
             is_dependency,
             dependencies,
@@ -100,6 +115,53 @@ pub async fn tracked_packages() -> HashSet<Package> {
         .keys()
         .map(String::clone)
         .collect()
+}
+
+pub async fn tracked_packages_aur() -> HashSet<Package> {
+    STATE
+        .persistent
+        .read()
+        .await
+        .package_status
+        .iter()
+        .filter_map(|(package, status)| {
+            if status.url.is_none() {
+                Some(package.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+pub async fn tracked_packages_url() -> HashMap<Package, String> {
+    STATE
+        .persistent
+        .read()
+        .await
+        .package_status
+        .iter()
+        .filter_map(|(package, status)| {
+            status
+                .url
+                .as_ref()
+                .map(|url| (package.clone(), url.clone()))
+        })
+        .collect()
+}
+
+pub async fn get_build_url(package: &Package) -> Option<String> {
+    STATE
+        .persistent
+        .read()
+        .await
+        .package_status
+        .get(package)
+        .map(|x| {
+            x.url
+                .clone()
+                .unwrap_or(format!("https://aur.archlinux.org/{package}.git"))
+        })
 }
 
 async fn all_dependencies() -> HashSet<Package> {
@@ -150,7 +212,7 @@ pub async fn get_build_times(packages: &HashSet<Package>) -> HashMap<Package, i6
         .filter_map(|(pkg, info)| {
             if packages.contains(pkg) {
                 if let Some(a) = info.build.as_ref().map(|x| x.time) {
-                    return Some((pkg.to_string(), a))
+                    return Some((pkg.to_string(), a));
                 }
             }
             None

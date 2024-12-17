@@ -4,7 +4,9 @@ use crate::Error;
 use clap::Args;
 use colored::Colorize;
 use coordinator::endpoints::Endpoints;
-use coordinator::{combine_for_display, ForceRebuild, ForceRebuildResponse};
+use coordinator::{
+    combine_for_display, AddPackageUrl, AddPackageUrlResponse, ForceRebuild, ForceRebuildResponse,
+};
 use coordinator::{
     AddPackages, AddPackagesResponse, RemovePackages, RemovePackagesResponse, Status,
 };
@@ -61,6 +63,34 @@ pub fn add(config: &Config, add: Add) -> Result<u8, Error> {
         "Added {} successfully",
         combine_for_display(&response.added)
     );
+    Ok(0)
+}
+
+#[derive(Clone, Args)]
+pub struct AddUrl {
+    /// An url pointing to a git repository with a PKGBUILD file
+    url: String,
+}
+
+pub fn add_url(config: &Config, add: AddUrl) -> Result<u8, Error> {
+    let client = Agent::new();
+    let endpoints: Endpoints = config.server.to_endpoints();
+
+    let add_packages = AddPackageUrl { url: add.url };
+    let response: AddPackageUrlResponse = client
+        .post(&endpoints.add_package_url())
+        .send_json(add_packages)
+        .map_err(Box::new)?
+        .into_json()?;
+
+    match response {
+        AddPackageUrlResponse::Ok(name) => info!("Successfully added {name}"),
+        AddPackageUrlResponse::AlreadyAdded(name) => error!("{name} is already tracked"),
+        AddPackageUrlResponse::Error(err) => {
+            error!("Failed to add package");
+            error!("{err}");
+        }
+    }
     Ok(0)
 }
 

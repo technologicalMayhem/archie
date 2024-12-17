@@ -62,6 +62,18 @@ pub struct ForceRebuildResponse {
     pub not_found: HashSet<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct AddPackageUrl {
+    pub url: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum AddPackageUrlResponse {
+    Ok(String),
+    AlreadyAdded(String),
+    Error(String),
+}
+
 pub fn env_or<T>(var: &str, or: T) -> T
 where
     T: FromStr,

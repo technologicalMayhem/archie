@@ -35,8 +35,13 @@ async fn main() -> Result<(), AppError> {
         std::process::exit(1);
     };
 
-    log::info!("Building {}", package);
-    let artifacts = build_pkg(package).await?;
+    let Ok(url) = std::env::var("URL") else {
+        error!("Failed to read environment variable 'URL'");
+        std::process::exit(1);
+    };
+
+    log::info!("Building {package} from {url}");
+    let artifacts = build_pkg(package, &url).await?;
 
     let response = client
         .post(endpoints.artifacts())
@@ -48,7 +53,7 @@ async fn main() -> Result<(), AppError> {
     Ok(())
 }
 
-async fn build_pkg(package_name: String) -> Result<Artifacts, AppError> {
+async fn build_pkg(package_name: String, package_url: &str) -> Result<Artifacts, AppError> {
     if exists("/home/worker/build")? {
         remove_dir_all("/home/worker/build")?;
     }
@@ -56,10 +61,8 @@ async fn build_pkg(package_name: String) -> Result<Artifacts, AppError> {
 
     let build_time = OffsetDateTime::now_utc().unix_timestamp();
 
-    let package_url = format!("https://aur.archlinux.org/{package_name}.git");
-
     run_command("sudo", &["pacman", "-Sy", "--needed", "--noconfirm", "git"]).await?;
-    run_command("git", &["clone", &package_url, "."]).await?;
+    run_command("git", &["clone", package_url, "."]).await?;
     run_command("makepkg", &["-s", "--needed", "--noconfirm"]).await?;
 
     let mut dir = tokio::fs::read_dir("/home/worker/build/").await?;

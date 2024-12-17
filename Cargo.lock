@@ -370,6 +370,7 @@ dependencies = [
  "serde",
  "serde_json",
  "signal-hook",
+ "tempfile",
  "thiserror",
  "time",
  "tokio",

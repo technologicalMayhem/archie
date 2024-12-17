@@ -1,3 +1,4 @@
+use crate::query_package::PackageData;
 use std::collections::HashSet;
 
 pub type Package = String;
@@ -5,6 +6,10 @@ pub type Package = String;
 #[derive(Clone)]
 pub enum Message {
     AddPackages(HashSet<Package>),
+    AddPackageUrl {
+        url: String,
+        data: PackageData,
+    },
     AddDependencies(HashSet<Package>),
     RemovePackages(HashSet<Package>),
     BuildPackage(Package),

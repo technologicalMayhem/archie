@@ -1,4 +1,4 @@
-use crate::config;
+use crate::{config, state};
 use crate::messages::{Message, Package};
 use crate::stop_token::StopToken;
 use bollard::container::{
@@ -14,8 +14,8 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tokio::time::sleep;
-use tracing::{debug, info};
 use tracing::log::{error, warn};
+use tracing::{debug, info};
 
 pub async fn start(sender: Sender<Message>, receiver: Receiver<Message>, stop_token: StopToken) {
     if let Err(err) = run(sender, receiver, stop_token).await {
@@ -23,6 +23,11 @@ pub async fn start(sender: Sender<Message>, receiver: Receiver<Message>, stop_to
     } else {
         info!("Stopped orchestrator");
     }
+}
+
+struct PackageToBuild {
+    package: Package,
+    url: String,
 }
 
 async fn run(
@@ -64,10 +69,16 @@ async fn run(
         if !receiver.is_empty() {
             let message = receiver.recv().await?;
             if let Message::BuildPackage(package) = message {
-                packages_to_build.push(package);
+                packages_to_build.push(PackageToBuild {
+                    url: state::get_build_url(&package).await.unwrap_or_default(),
+                    package,
+                });
             } else if let Message::RemovePackages(packages) = message {
                 for package in packages {
-                    if let Some(index) = packages_to_build.iter().position(|to_build| **to_build == package) {
+                    if let Some(index) = packages_to_build
+                        .iter()
+                        .position(|to_build| to_build.package == package)
+                    {
                         packages_to_build.remove(index);
                     }
                     if let Some(container) = active_containers.remove(&package) {
@@ -78,10 +89,7 @@ async fn run(
                         {
                             error!("Failed to stop container {container} for {package}: {err}");
                         };
-                        if let Err(err) = docker
-                            .remove_container(&container, None)
-                            .await
-                        {
+                        if let Err(err) = docker.remove_container(&container, None).await {
                             error!("Failed to stop container {container} for {package}: {err}");
                         };
                     }
@@ -89,9 +97,9 @@ async fn run(
             }
         }
         if !packages_to_build.is_empty() && active_containers.len() < config::max_builders() {
-            let package = packages_to_build.pop().unwrap();
-            let container_id = start_build_container(&docker, &image, &package).await?;
-            active_containers.insert(package, container_id);
+            let build = packages_to_build.pop().unwrap();
+            let container_id = start_build_container(&docker, &image, &build.package, &build.url).await?;
+            active_containers.insert(build.package, container_id);
         }
         clean_up_containers(&docker, &sender, &mut active_containers).await?;
         sleep(Duration::from_millis(100)).await;
@@ -102,15 +110,17 @@ async fn start_build_container(
     docker: &Docker,
     image: &str,
     package: &Package,
+    url: &str,
 ) -> Result<String, Error> {
     let options = CreateContainerOptions {
         name: package.to_string(),
         ..Default::default()
     };
-    let env_var = format!("PACKAGE={package}");
+    let env_package = format!("PACKAGE={package}");
+    let env_url = format!("URL={url}");
     let config = Config {
         image: Some(image),
-        env: Some(vec![&env_var]),
+        env: Some(vec![&env_package, &env_url]),
         host_config: Some(HostConfig {
             memory: config::max_memory(),
             ..Default::default()

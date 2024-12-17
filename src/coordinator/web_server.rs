@@ -1,14 +1,15 @@
 use crate::messages::Message;
+use crate::query_package::{Error, PackageData};
 use crate::repository::REPO_DIR;
 use crate::stop_token::StopToken;
-use crate::{aur, config, state};
+use crate::{config, query_package, state};
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use coordinator::{
-    AddPackages, AddPackagesResponse, Artifacts, ForceRebuild, ForceRebuildResponse,
-    RemovePackages, RemovePackagesResponse, Status,
+    AddPackageUrl, AddPackageUrlResponse, AddPackages, AddPackagesResponse, Artifacts,
+    ForceRebuild, ForceRebuildResponse, RemovePackages, RemovePackagesResponse, Status,
 };
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -39,6 +40,7 @@ pub async fn start(sender: Sender<Message>, mut stop_token: StopToken) {
     let router = Router::new()
         .route("/status", get(status))
         .route("/packages/add", post(add_package))
+        .route("/packages/add-url", post(add_package_url))
         .route("/packages/remove", post(remove_package))
         .route("/packages/rebuild", post(force_rebuild))
         .route(
@@ -65,10 +67,12 @@ async fn add_package(
     state: State<RequestState>,
     Json(add): Json<AddPackages>,
 ) -> Result<Json<AddPackagesResponse>, StatusCode> {
-    let package_info = aur::do_packages_exist(&add.packages).await.map_err(|err| {
-        error!("Failed to get packages from the AUR: {err}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let package_info = query_package::do_packages_exist(&add.packages)
+        .await
+        .map_err(|err| {
+            error!("Failed to get packages from the AUR: {err}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     let tracked_packages = state::tracked_packages().await;
 
     let not_found: HashSet<String> = add
@@ -95,6 +99,24 @@ async fn add_package(
         not_found,
         already_tracked,
     }))
+}
+
+async fn add_package_url(
+    state: State<RequestState>,
+    Json(add): Json<AddPackageUrl>,
+) -> Result<Json<AddPackageUrlResponse>, StatusCode> {
+    match query_package::check_pkgbuild(&add.url).await {
+        Ok(data) => {
+            if state::is_package_tracked(&data.name).await {
+                Ok(Json(AddPackageUrlResponse::AlreadyAdded(data.name)))
+            } else {
+                let name = data.name.clone();
+                state.send_message(Message::AddPackageUrl{url: add.url, data})?;
+                Ok(Json(AddPackageUrlResponse::Ok(name)))
+            }
+        }
+        Err(err) => Ok(Json(AddPackageUrlResponse::Error(err.to_string()))),
+    }
 }
 
 async fn receive_artifacts(
