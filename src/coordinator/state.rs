@@ -164,6 +164,19 @@ pub async fn get_build_url(package: &Package) -> Option<String> {
         })
 }
 
+pub async fn are_dependencies_met(package: &Package) -> bool {
+    let state = &STATE.persistent.read().await.package_status;
+    state
+        .get(package)
+        .is_some_and(|x| {
+            x.dependencies.iter().all(|dep| {
+                state
+                    .get(dep)
+                    .map_or(false, |dep_info| dep_info.build.is_some())
+            })
+        })
+}
+
 async fn all_dependencies() -> HashSet<Package> {
     STATE
         .persistent

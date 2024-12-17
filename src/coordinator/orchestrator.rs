@@ -1,6 +1,6 @@
-use crate::{config, state};
 use crate::messages::{Message, Package};
 use crate::stop_token::StopToken;
+use crate::{config, state};
 use bollard::container::{
     Config, CreateContainerOptions, LogOutput, LogsOptions, StopContainerOptions,
 };
@@ -96,10 +96,22 @@ async fn run(
                 }
             }
         }
-        if !packages_to_build.is_empty() && active_containers.len() < config::max_builders() {
-            let build = packages_to_build.pop().unwrap();
-            let container_id = start_build_container(&docker, &image, &build.package, &build.url).await?;
-            active_containers.insert(build.package, container_id);
+        if active_containers.len() < config::max_builders() {
+            if let Some(index) = {
+                let mut index = None;
+                for (i, pkg) in packages_to_build.iter().enumerate() {
+                    if state::are_dependencies_met(&pkg.package).await {
+                        index = Some(i);
+                        break;
+                    }
+                }
+                index
+            } {
+                let build = packages_to_build.remove(index);
+                let container_id =
+                    start_build_container(&docker, &image, &build.package, &build.url).await?;
+                active_containers.insert(build.package, container_id);
+            }
         }
         clean_up_containers(&docker, &sender, &mut active_containers).await?;
         sleep(Duration::from_millis(100)).await;
@@ -118,9 +130,11 @@ async fn start_build_container(
     };
     let env_package = format!("PACKAGE={package}");
     let env_url = format!("URL={url}");
+    let env_repo = format!("REPO={}", config::repo_name());
+    let env_port = format!("PORT={}", config::port());
     let config = Config {
         image: Some(image),
-        env: Some(vec![&env_package, &env_url]),
+        env: Some(vec![&env_package, &env_url, &env_repo, &env_port]),
         host_config: Some(HostConfig {
             memory: config::max_memory(),
             ..Default::default()

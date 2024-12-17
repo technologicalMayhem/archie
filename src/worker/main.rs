@@ -3,11 +3,13 @@ use coordinator::endpoints::Endpoints;
 use coordinator::{abort_if_not_in_docker, print_version, Artifacts};
 use reqwest::header::{HeaderMap, HeaderValue};
 use std::collections::HashMap;
-use std::fs::{create_dir_all, exists, read_to_string, remove_dir_all};
+use std::fs::{create_dir_all, exists, read_to_string, remove_dir_all, write};
 use thiserror::Error;
 use time::OffsetDateTime;
 use tokio::process::Command;
 use tracing::{error, info, log, Level};
+
+const HOST_IP: &str = "172.17.0.1";
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
@@ -25,20 +27,18 @@ async fn main() -> Result<(), AppError> {
         .default_headers(headers)
         .build()?;
     let endpoints = Endpoints {
-        address: "172.17.0.1".to_string(),
+        address: HOST_IP.to_string(),
         https: false,
         ..Default::default()
     };
 
-    let Ok(package) = std::env::var("PACKAGE") else {
-        error!("Failed to read environment variable 'PACKAGE'");
-        std::process::exit(1);
-    };
+    let package = get_env("PACKAGE");
+    let url = get_env("URL");
+    let repo = get_env("REPO");
+    let port = get_env("PORT");
 
-    let Ok(url) = std::env::var("URL") else {
-        error!("Failed to read environment variable 'URL'");
-        std::process::exit(1);
-    };
+    let pacman_conf = format!("[{repo}]\nServer = http://{HOST_IP}:{port}/repo\nSigLevel = Optional TrustAll");
+    write("/home/worker/pacman.conf", pacman_conf)?;
 
     log::info!("Building {package} from {url}");
     let artifacts = build_pkg(package, &url).await?;
@@ -51,6 +51,14 @@ async fn main() -> Result<(), AppError> {
 
     log::info!("Sent off artifacts. Got back a {}", response.status());
     Ok(())
+}
+
+fn get_env(name: &str) -> String {
+    let Ok(port) = std::env::var(name) else {
+        error!("Failed to read environment variable '{name}'");
+        std::process::exit(1);
+    };
+    port
 }
 
 async fn build_pkg(package_name: String, package_url: &str) -> Result<Artifacts, AppError> {
@@ -70,9 +78,9 @@ async fn build_pkg(package_name: String, package_url: &str) -> Result<Artifacts,
     while let Some(entry) = dir.next_entry().await? {
         if entry.file_type().await?.is_file()
             && entry
-                .file_name()
-                .to_string_lossy()
-                .ends_with(".pkg.tar.zst")
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".pkg.tar.zst")
         {
             let name = entry.file_name().to_string_lossy().to_string();
             let data = tokio::fs::read(entry.path()).await?;

@@ -33,9 +33,11 @@ async fn run(sender: Sender<Message>, mut receiver: Receiver<Message>, mut token
 
         if next_update_check < now {
             if check_for_package_updates(&sender).await {
+                debug!("Update check succeeded");
                 next_update_check = now + update_check_interval;
                 retries.clear();
             } else {
+                debug!("Failed update check. Trying again in five minutes");
                 next_update_check = now + RETRY_TIME;
             }
         }

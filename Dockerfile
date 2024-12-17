@@ -34,6 +34,8 @@ CMD ["./coordinator"]
 FROM archlinux:multilib-devel AS worker
 RUN echo 'worker ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/worker
 RUN echo 'OPTIONS=(!strip docs libtool staticlibs emptydirs !zipman !purge !debug !lto !autodeps)' > /etc/makepkg.conf.d/options.conf
+RUN echo "[options]" >> /etc/pacman.conf
+RUN echo "Include=/home/worker/pacman.conf" >> /etc/pacman.conf
 RUN groupadd -g 1000 worker
 RUN useradd -s /bin/sh -u 1000 -g worker worker
 WORKDIR /home/worker/bin/
