@@ -1,11 +1,12 @@
 use crate::config::Config;
 use crate::util::wrap_text;
 use crate::Error;
-use clap::Args;
+use clap::{Args, Subcommand};
 use colored::Colorize;
 use coordinator::endpoints::Endpoints;
 use coordinator::{
     combine_for_display, AddPackageUrl, AddPackageUrlResponse, ForceRebuild, ForceRebuildResponse,
+    ListLogsResponse, LogInfo,
 };
 use coordinator::{
     AddPackages, AddPackagesResponse, RemovePackages, RemovePackagesResponse, Status,
@@ -227,6 +228,49 @@ pub fn status(config: &Config) -> Result<u8, Error> {
     info!("{}", "Tracked packages:".bold());
     info!("{package_text_block}");
 
+    Ok(0)
+}
+
+#[derive(Clone, Subcommand)]
+pub enum Logs {
+    /// List available logs for failed builds
+    List,
+    /// Read log file at the given index
+    Get { index: usize },
+}
+
+pub fn logs(config: &Config, logs: Logs) -> Result<u8, Error> {
+    let client = Agent::new();
+    let endpoints: Endpoints = config.server.to_endpoints();
+
+    match logs {
+        Logs::List => {
+            let list: ListLogsResponse = client
+                .get(&endpoints.list_logs())
+                .call()
+                .map_err(Box::new)?
+                .into_json()?;
+
+            if list.logs.is_empty() {
+                info!("No logs for failed builds found");
+            }
+
+            for (index, LogInfo { package, time }) in list.logs.iter().enumerate() {
+                info!("{}: {package} failed to build at {time}", index + 1);
+            }
+        }
+        Logs::Get { index } => {
+            let response = client.get(&endpoints.get_log(index - 1)).call();
+
+            if matches!(response, Err(ureq::Error::Status(404, _))) {
+                error!("Failed to get log with index {index}");
+                return Ok(1);
+            }
+
+            let log = response.map_err(Box::new)?.into_string()?;
+            info!("{log}");
+        }
+    }
     Ok(0)
 }
 

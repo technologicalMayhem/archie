@@ -1,18 +1,18 @@
 use crate::messages::Message;
-use crate::query_package::{Error, PackageData};
 use crate::repository::REPO_DIR;
 use crate::stop_token::StopToken;
-use crate::{config, query_package, state, SSH_KEY_PATH};
-use axum::extract::{DefaultBodyLimit, State};
+use crate::{config, logs, query_package, state, SSH_KEY_PATH};
+use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use coordinator::{
     AddPackageUrl, AddPackageUrlResponse, AddPackages, AddPackagesResponse, Artifacts,
-    ForceRebuild, ForceRebuildResponse, RemovePackages, RemovePackagesResponse, Status,
+    ForceRebuild, ForceRebuildResponse, ListLogsResponse, RemovePackages, RemovePackagesResponse,
+    Status,
 };
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::{Path as StdPath, PathBuf};
 use tokio::fs::read;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::Sender;
@@ -49,6 +49,8 @@ pub async fn start(sender: Sender<Message>, mut stop_token: StopToken) {
             post(receive_artifacts).layer(DefaultBodyLimit::disable()),
         )
         .route("/key", get(get_key))
+        .route("/logs", get(list_logs))
+        .route("/logs/:id", get(get_log))
         .with_state(state)
         .nest_service("/repo", ServeDir::new(REPO_DIR));
 
@@ -223,8 +225,20 @@ async fn status() -> Json<Status> {
     })
 }
 
+async fn list_logs() -> Result<Json<ListLogsResponse>, StatusCode> {
+    let logs = logs::list_logs().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(ListLogsResponse { logs }))
+}
+
+async fn get_log(Path(index): Path<usize>) -> Result<String, StatusCode> {
+    logs::get_log_by_index(index)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
 fn sanitize_filename(file_name: &str) -> String {
-    Path::new(file_name)
+    StdPath::new(file_name)
         .file_name()
         .unwrap_or_else(|| "default".as_ref())
         .to_string_lossy()

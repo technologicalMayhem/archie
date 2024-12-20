@@ -8,6 +8,7 @@ mod scheduler;
 mod state;
 mod stop_token;
 mod web_server;
+mod logs;
 
 use crate::messages::Message;
 use crate::stop_token::StopToken;

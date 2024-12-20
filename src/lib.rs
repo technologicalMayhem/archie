@@ -74,6 +74,17 @@ pub enum AddPackageUrlResponse {
     Error(String),
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LogInfo {
+    pub package: String,
+    pub time: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ListLogsResponse {
+    pub logs: Vec<LogInfo>,
+}
+
 pub fn env_or<T>(var: &str, or: T) -> T
 where
     T: FromStr,

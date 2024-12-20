@@ -14,10 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The memory usage of the worker can now be limited
 - Packages can be added from a git repositories url
 - A ssh key gets created a startup to allow access to git repositories with access control
+- Logs now be inspected using the cli tool
 
 ### Changed
 
 - Makepkg is now being used instead of paru
+- Logs are no longer being output to the coordinator logs. They can now be retrieved with the cli tool or read from the
+  `/logs` directory withing the container
+    - Added a `MAX_LOGS` environment variable. Logs get rotated if they exceed the maximum number
 
 ### Fixed
 
@@ -79,5 +83,7 @@ Initial implementation of the application
 - Graceful termination of the application using signal handling
 
 [Unreleased]: https://git.techmayhem.net/techMayhem/archie/compare/v0.2.0...HEAD
+
 [0.2.0]: https://git.techmayhem.net/techMayhem/archie/compare/v0.1.0...v0.2.0
+
 [0.1.0]: https://git.techmayhem.net/techMayhem/archie/releases/tag/v0.1.0

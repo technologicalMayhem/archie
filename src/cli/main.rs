@@ -34,6 +34,9 @@ enum Action {
     Rebuild(actions::Rebuild),
     /// Display the status of coordinator
     Status,
+    /// List or get logs from failed builds
+    #[command(subcommand)]
+    Logs(actions::Logs),
     /// Setup archie's config
     Init,
     /// Print version info
@@ -63,6 +66,7 @@ fn main() -> Result<ExitCode, Error> {
         Action::Remove(remove) => actions::remove(&config, remove),
         Action::Rebuild(rebuild) => actions::rebuild(&config, &rebuild),
         Action::Status => actions::status(&config),
+        Action::Logs(logs) => actions::logs(&config, logs),
         Action::Init => config::init(&mut config, &args.profile).map_err(Error::from),
         Action::Version => {
             print_version();

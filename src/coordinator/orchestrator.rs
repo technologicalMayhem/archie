@@ -1,9 +1,7 @@
 use crate::messages::{Message, Package};
 use crate::stop_token::StopToken;
-use crate::{config, state};
-use bollard::container::{
-    Config, CreateContainerOptions, LogOutput, LogsOptions, StopContainerOptions,
-};
+use crate::{config, logs, state};
+use bollard::container::{Config, CreateContainerOptions, LogsOptions, StopContainerOptions};
 use bollard::models::{ContainerStateStatusEnum, HostConfig};
 use bollard::Docker;
 use futures::future::join_all;
@@ -187,8 +185,8 @@ async fn clean_up_containers(
         match status {
             ContainerStateStatusEnum::EXITED => {
                 if exit_code != 0 {
-                    warn!("{id} exited abnormally. Printing logs:");
-                    get_logs(docker, id).await;
+                    warn!("{id} exited abnormally. Saving log");
+                    get_logs(docker, id, package).await?;
                     if let Err(err) = sender.send(Message::BuildFailure(package.to_string())) {
                         error!("Failed to send message: {err}");
                     }
@@ -225,7 +223,7 @@ async fn remove_container(docker: &Docker, id: &str) {
     }
 }
 
-async fn get_logs(docker: &Docker, id: &str) {
+async fn get_logs(docker: &Docker, id: &str, package: &Package) -> Result<(), Error> {
     let mut logs = docker.logs::<String>(
         id,
         Some(LogsOptions {
@@ -239,25 +237,7 @@ async fn get_logs(docker: &Docker, id: &str) {
     while let Some(log_result) = logs.next().await {
         match log_result {
             Ok(log) => {
-                let (t, mut m) = match log {
-                    LogOutput::StdErr { message } => {
-                        ("ERR", String::from_utf8_lossy(&message).to_string())
-                    }
-                    LogOutput::StdOut { message } => {
-                        ("OUT", String::from_utf8_lossy(&message).to_string())
-                    }
-                    LogOutput::StdIn { message } => {
-                        ("IN", String::from_utf8_lossy(&message).to_string())
-                    }
-                    LogOutput::Console { message } => {
-                        ("CON", String::from_utf8_lossy(&message).to_string())
-                    }
-                };
-
-                if m.ends_with('\n') {
-                    m.pop();
-                }
-                entries.push(format!("{t} - {m}"));
+                entries.push(log.to_string());
             }
             Err(err) => {
                 entries.push(format!("Error for log entry: {err}"));
@@ -265,8 +245,8 @@ async fn get_logs(docker: &Docker, id: &str) {
         }
     }
 
-    let full_log = entries.join("\n");
-    warn!("{full_log}");
+    logs::add_log(package, &entries)?;
+    Ok(())
 }
 
 #[derive(Debug, Error)]
@@ -281,4 +261,6 @@ pub enum Error {
     Env(#[from] std::env::VarError),
     #[error("A join error occurred: {0}")]
     Join(#[from] tokio::task::JoinError),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }

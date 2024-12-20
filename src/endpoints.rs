@@ -30,7 +30,7 @@ impl Endpoints {
     pub fn rebuilt_packages(&self) -> String {
         self.url("packages/rebuild")
     }
-    
+
     #[must_use]
     pub fn key(&self) -> String {
         self.url("key")
@@ -39,6 +39,16 @@ impl Endpoints {
     #[must_use]
     pub fn status(&self) -> String {
         self.url("status")
+    }
+
+    #[must_use]
+    pub fn list_logs(&self) -> String {
+        self.url("logs")
+    }
+
+    #[must_use]
+    pub fn get_log(&self, index: usize) -> String {
+        self.url(&format!("logs/{index}"))
     }
 
     fn base(&self) -> String {

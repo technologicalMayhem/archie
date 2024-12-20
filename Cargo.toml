@@ -30,7 +30,7 @@ clap = { version = "4.5.21", features = ["derive"] }
 reqwest = { version = "0.12", features = ["json"] }
 axum = { version = "0.7", features = ["macros"] }
 signal-hook = "0.3"
-time = "0.3"
+time = { version = "0.3", features = ["formatting"] }
 tower-http = { version = "0.6.2" , features = ["fs"]}
 figment = { version = "0.10.19", features = ["env", "toml"] }
 home = "0.5.9"
