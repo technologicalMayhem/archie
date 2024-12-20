@@ -36,9 +36,15 @@ struct Persistent {
     pub package_status: HashMap<Package, PackageInfo>,
 }
 
+#[derive(Default)]
+struct Ephemeral {
+    active_containers: HashSet<String>,
+}
+
 #[derive(Clone)]
 struct State {
     persistent: Arc<RwLock<Persistent>>,
+    ephemeral: Arc<RwLock<Ephemeral>>
 }
 
 fn load_state() -> Result<State, Error> {
@@ -52,6 +58,7 @@ fn load_state() -> Result<State, Error> {
 
     Ok(State {
         persistent: Arc::new(RwLock::new(persistent)),
+        ephemeral: Arc::new(RwLock::new(Ephemeral::default())),
     })
 }
 
@@ -281,6 +288,18 @@ pub async fn remove_packages(package: &HashSet<Package>) {
 
     drop(persistent);
     save_state().await;
+}
+
+pub async fn add_running_container(id: String) {
+    STATE.ephemeral.write().await.active_containers.insert(id);
+}
+
+pub async fn remove_running_container(id: &str) {
+    STATE.ephemeral.write().await.active_containers.remove(id);
+}
+
+pub async fn is_container_running(id: &str) -> bool {
+    STATE.ephemeral.read().await.active_containers.contains(id)
 }
 
 #[derive(Debug, Error)]

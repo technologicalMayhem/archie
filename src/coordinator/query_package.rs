@@ -4,13 +4,14 @@ use itertools::Itertools;
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
+use std::fs::FileType;
 use std::sync::LazyLock;
 use std::time::Duration;
 use tempfile::tempdir;
 use thiserror::Error;
 use tokio::fs::try_exists;
 use tokio::sync::RwLock;
-use tracing::{debug, error};
+use tracing::{debug, error, Level};
 
 const URL: &str = "https://aur.archlinux.org/rpc/v5/info?";
 const ARG: &str = "arg[]=";
@@ -46,10 +47,16 @@ pub async fn check_pkgbuild<U: AsRef<str>>(url: U) -> Result<PackageData, Error>
     let path = dir.path().to_str().ok_or(Error::TempDirPath)?;
 
     debug!("Cloning git repository {}", url.as_ref());
-    tokio::process::Command::new("git")
+    let output = tokio::process::Command::new("git")
         .args(["clone", url.as_ref(), path])
         .output()
         .await?;
+
+    if !output.status.success() {
+        return Err(Error::FailedToClone(
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        ));
+    }
 
     if !try_exists(dir.path().join("PKGBUILD")).await? {
         return Err(Error::PkgbuildMissing);
@@ -103,7 +110,11 @@ pub async fn check_pkgbuild<U: AsRef<str>>(url: U) -> Result<PackageData, Error>
         .parse()
         .map_err(|_| Error::FailedToParseTimestamp)?;
 
-    Ok(PackageData { name, last_modified, depends })
+    Ok(PackageData {
+        name,
+        last_modified,
+        depends,
+    })
 }
 
 pub async fn update_non_aur_packages(mut stop_token: StopToken) {
@@ -226,4 +237,6 @@ pub enum Error {
     PkgbuildNameMissing,
     #[error("Could not parse unix timestamp")]
     FailedToParseTimestamp,
+    #[error("Failed to clone repository: {0}")]
+    FailedToClone(String),
 }

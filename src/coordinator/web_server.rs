@@ -2,9 +2,9 @@ use crate::messages::Message;
 use crate::query_package::{Error, PackageData};
 use crate::repository::REPO_DIR;
 use crate::stop_token::StopToken;
-use crate::{config, query_package, state};
+use crate::{config, query_package, state, SSH_KEY_PATH};
 use axum::extract::{DefaultBodyLimit, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use coordinator::{
@@ -13,6 +13,7 @@ use coordinator::{
 };
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use tokio::fs::read;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::Sender;
 use tower_http::services::ServeDir;
@@ -47,6 +48,7 @@ pub async fn start(sender: Sender<Message>, mut stop_token: StopToken) {
             "/artifacts",
             post(receive_artifacts).layer(DefaultBodyLimit::disable()),
         )
+        .route("/key", get(get_key))
         .with_state(state)
         .nest_service("/repo", ServeDir::new(REPO_DIR));
 
@@ -111,7 +113,7 @@ async fn add_package_url(
                 Ok(Json(AddPackageUrlResponse::AlreadyAdded(data.name)))
             } else {
                 let name = data.name.clone();
-                state.send_message(Message::AddPackageUrl{url: add.url, data})?;
+                state.send_message(Message::AddPackageUrl { url: add.url, data })?;
                 Ok(Json(AddPackageUrlResponse::Ok(name)))
             }
         }
@@ -196,6 +198,23 @@ async fn force_rebuild(
     }
 
     Ok(Json(ForceRebuildResponse { not_found }))
+}
+
+async fn get_key(headers: HeaderMap) -> Result<Vec<u8>, StatusCode> {
+    let Some(hostname) = headers
+        .get("hostname")
+        .and_then(|header| header.to_str().ok())
+    else {
+        return Err(StatusCode::BAD_REQUEST);
+    };
+
+    if !state::is_container_running(hostname).await {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    read(SSH_KEY_PATH)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 async fn status() -> Json<Status> {

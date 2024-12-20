@@ -1,8 +1,8 @@
 #![warn(clippy::pedantic)]
-mod query_package;
 mod config;
 mod messages;
 mod orchestrator;
+mod query_package;
 mod repository;
 mod scheduler;
 mod state;
@@ -15,9 +15,12 @@ use coordinator::{abort_if_not_in_docker, combine_for_display, print_version};
 use signal_hook::consts::{SIGINT, SIGTERM};
 use std::collections::HashMap;
 use std::env::var;
+use std::fs::{copy, create_dir_all, exists, read_to_string, write};
+use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use itertools::Itertools;
 use thiserror::Error;
 use tokio::sync::broadcast::channel;
 use tokio::task::{Id, JoinSet};
@@ -27,8 +30,10 @@ use tracing::log::info;
 use tracing_subscriber::filter::FilterFn;
 use tracing_subscriber::{filter::LevelFilter, fmt, prelude::*};
 
+pub const SSH_KEY_PATH: &str = "/config/id_ed25519";
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Error> {
     abort_if_not_in_docker();
 
     tracing_subscriber::registry()
@@ -37,6 +42,8 @@ async fn main() {
         .with(get_log_level())
         .init();
     print_version();
+
+    setup_ssh()?;
 
     let mut set = JoinSet::new();
     let mut master_stop_token = StopToken::new();
@@ -79,6 +86,8 @@ async fn main() {
     ]);
 
     handle_task_exits(&mut set, &mut stop_token, task_ids).await;
+
+    Ok(())
 }
 
 async fn handle_task_exits(
@@ -152,6 +161,29 @@ fn get_log_level() -> LevelFilter {
     }
 }
 
+fn setup_ssh() -> Result<(), Error> {
+    if !exists(SSH_KEY_PATH)? {
+        let output = Command::new("ssh-keygen")
+            .args(["-f", SSH_KEY_PATH, "-t", "ed25519"])
+            .output()?;
+        if !output.status.success() {
+            return Err(Error::GenerateKey)
+        }
+        info!("Generated a new SSH key.");
+    }
+    create_dir_all("/root/.ssh/")?;
+    copy(SSH_KEY_PATH, "/root/.ssh/id_ed25519")?;
+    write("/root/.ssh/config", "StrictHostKeyChecking accept-new")?;
+
+    let pub_key = read_to_string(format!("{SSH_KEY_PATH}.pub"))?;
+    let trimmed_key = pub_key.trim().split(' ').take(2).join(" ");
+
+    info!("The public key is:");
+    info!("{trimmed_key}");
+
+    Ok(())
+}
+
 #[derive(Debug, Error)]
 enum Error {
     #[error("Failed to make a request: {0}")]
@@ -164,4 +196,6 @@ enum Error {
     Orchestrator(#[from] orchestrator::Error),
     #[error("State error: {0}")]
     State(#[from] state::Error),
+    #[error("Failed to generate ssh key")]
+    GenerateKey
 }

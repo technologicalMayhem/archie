@@ -152,6 +152,7 @@ async fn start_build_container(
     }
 
     docker.start_container::<String>(&response.id, None).await?;
+    state::add_running_container(response.id[0..12].to_string()).await;
     Ok(response.id)
 }
 
@@ -193,6 +194,7 @@ async fn clean_up_containers(
                     }
                 }
                 remove_container(docker, id).await;
+                state::remove_running_container(&id[0..12]).await;
                 removed.push(package.to_owned());
                 continue;
             }

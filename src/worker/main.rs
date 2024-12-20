@@ -3,7 +3,9 @@ use coordinator::endpoints::Endpoints;
 use coordinator::{abort_if_not_in_docker, print_version, Artifacts};
 use reqwest::header::{HeaderMap, HeaderValue};
 use std::collections::HashMap;
-use std::fs::{create_dir_all, exists, read_to_string, remove_dir_all, write};
+use std::fs::{create_dir_all, exists, read_to_string, remove_dir_all, set_permissions, write, Permissions};
+use std::num::ParseIntError;
+use std::os::unix::fs::PermissionsExt;
 use thiserror::Error;
 use time::OffsetDateTime;
 use tokio::process::Command;
@@ -19,6 +21,15 @@ async fn main() -> Result<(), AppError> {
         .init();
     print_version();
 
+    let package = get_env("PACKAGE");
+    let url = get_env("URL");
+    let repo = get_env("REPO");
+    let port = get_env("PORT");
+
+    let pacman_conf =
+        format!("[{repo}]\nServer = http://{HOST_IP}:{port}/repo\nSigLevel = Optional TrustAll");
+    write("/home/worker/pacman.conf", pacman_conf)?;
+
     let mut headers = HeaderMap::new();
     let hostname = read_to_string("/etc/hostname")?.replace('\n', "");
     info!("Hostname: {hostname}");
@@ -29,16 +40,14 @@ async fn main() -> Result<(), AppError> {
     let endpoints = Endpoints {
         address: HOST_IP.to_string(),
         https: false,
-        ..Default::default()
+        port: port.parse()?,
     };
 
-    let package = get_env("PACKAGE");
-    let url = get_env("URL");
-    let repo = get_env("REPO");
-    let port = get_env("PORT");
-
-    let pacman_conf = format!("[{repo}]\nServer = http://{HOST_IP}:{port}/repo\nSigLevel = Optional TrustAll");
-    write("/home/worker/pacman.conf", pacman_conf)?;
+    let data = client.get(endpoints.key()).send().await?.bytes().await?;
+    create_dir_all("/home/worker/.ssh")?;
+    write("/home/worker/.ssh/id_ed25519", data)?;
+    set_permissions("/home/worker/.ssh/id_ed25519", Permissions::from_mode(0o600))?;
+    write("/home/worker/.ssh/config", "StrictHostKeyChecking accept-new")?;
 
     log::info!("Building {package} from {url}");
     let artifacts = build_pkg(package, &url).await?;
@@ -69,7 +78,7 @@ async fn build_pkg(package_name: String, package_url: &str) -> Result<Artifacts,
 
     let build_time = OffsetDateTime::now_utc().unix_timestamp();
 
-    run_command("sudo", &["pacman", "-Sy", "--needed", "--noconfirm", "git"]).await?;
+    run_command("sudo", &["pacman", "-Sy", "--needed", "--noconfirm", "git", "openssh"]).await?;
     run_command("git", &["clone", package_url, "."]).await?;
     run_command("makepkg", &["-s", "--needed", "--noconfirm"]).await?;
 
@@ -127,4 +136,6 @@ enum AppError {
     ProcessFailed,
     #[error("Invalid header value: {0}")]
     Header(#[from] reqwest::header::InvalidHeaderValue),
+    #[error("Failed to parse an integer: {0}")]
+    ParseInt(#[from] ParseIntError),
 }

@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Config option for update check interval
 - Users can request rebuilds manually
 - The memory usage of the worker can now be limited
-- Packages can be added from a git repo url
+- Packages can be added from a git repositories url
+- A ssh key gets created a startup to allow access to git repositories with access control
 
 ### Changed
 
